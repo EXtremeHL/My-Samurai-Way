@@ -30,16 +30,35 @@ uv run --with pillow --with numpy python tools/gen_art.py
 - `assets/textures/*.png`: tiles com 32 px por metro, aplicados em triplanar
   no mundo.
 
+## Controlos
+| Tecla | Ação |
+|---|---|
+| WASD / setas | andar |
+| Shift (manter) | correr |
+| E / Espaço / Enter | falar · avançar diálogo |
+| Esc | avançar / fechar diálogo |
+
 ## Correr
 ```bash
 GODOT=".../Godot_v4.7-stable_win64_console.exe"
+"$GODOT" --path .                              # jogar
 "$GODOT" --path . -- --look noite              # dourado | neblina | noite
 "$GODOT" --path . -- --capture res://.captures # renderiza as 3 luzes e sai
+"$GODOT" --path . -- --shots res://.captures   # capturas de jogo (andar/falar/ponte)
+```
+
+## Testes
+```bash
+"$GODOT" --headless --path . -s tests/smoke_project_config.gd   # config + input map
+"$GODOT" --headless --path . -- --playthrough                    # integração (jogo real)
 ```
 
 ## Estrutura
 - `scripts/main.gd`: cena de entrada, câmara e hooks da linha de comandos.
-- `scripts/village.gd`: constrói Kurogane-juku, o primeiro vale.
+- `scripts/village.gd`: constrói Kurogane-juku (com colisões e altura do terreno).
+- `scripts/actor.gd`, `player.gd`, `npc.gd`: personagens que andam, com animação de 4 frames em 3 direções.
+- `scripts/npc_data.gd`: quem vive na vila e o que diz (facções e enredo).
+- `scripts/dialogue_box.gd`: caixa de diálogo com efeito de máquina de escrever.
 - `scripts/look.gd`: presets de luz e pós-processamento.
 - `scripts/pixel_sprite.gd` + `shaders/sprite_lit.gdshader`: cartões de
   pixel-art iluminados que projetam sombra.

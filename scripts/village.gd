@@ -4,16 +4,11 @@ extends Node3D
 ## textured boxes (architecture) and lit pixel cards (people, trees).
 ## All placement is hand-authored or seeded so every run is identical.
 
-const CHAR_W := 32
-const CHAR_H := 48
-const ROW := {"down": 0, "up": 1, "side": 2}
-
 var lantern_lights: Array[OmniLight3D] = []
 var lantern_mat: StandardMaterial3D
 var water_mat: StandardMaterial3D
 var petals: CPUParticles3D
 var fireflies: CPUParticles3D
-var characters := {}
 
 
 func build() -> void:
@@ -32,7 +27,7 @@ func build() -> void:
 	_well(Vector3(5.2, 0, 3.4))
 	_props()
 	_foliage()
-	_people()
+	_bounds()
 	_particles()
 
 
@@ -71,6 +66,34 @@ func cyl(pos: Vector3, r_top: float, r_bot: float, h: float, mat: Material, segs
 	return m
 
 
+## Invisible collider; footprint `size` (x, z) centred at `pos`, 2 m tall.
+func solid(pos: Vector3, size: Vector2, parent: Node3D = null, rot_y := 0.0) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(size.x, 2.0, size.y)
+	cs.shape = shape
+	body.add_child(cs)
+	body.position = Vector3(pos.x, 1.0, pos.z)
+	body.rotation_degrees.y = rot_y
+	(parent if parent else self).add_child(body)
+	return body
+
+
+## Walkable surface height: flat ground, except the arched bridge deck.
+static func ground_height(p: Vector3) -> float:
+	if p.z < -1.2 or p.z > 1.7:
+		return 0.0
+	var dx := absf(p.x - 12.5)
+	if dx > 2.3:
+		return 0.0
+	var t := clampf((p.x - 12.5) / 1.8, -1.0, 1.0)
+	var deck := 0.34 - t * t * 0.18
+	if dx > 1.9:
+		deck *= (2.3 - dx) / 0.4      # ramp down onto the road
+	return deck
+
+
 func sprite(path: String, pos: Vector3, scale_f := 1.0, fw := 0, fh := 0) -> PixelSprite:
 	var s := PixelSprite.make(path, fw, fh)
 	s.position = pos
@@ -102,6 +125,11 @@ func _stream_and_bridge() -> void:
 	var stone := Mat.tex("stone")
 	for side in [-1.0, 1.0]:
 		box(Vector3(12.5 + side * 1.35, -0.15, -10.0), Vector3(0.3, 0.4, 80.0), stone)
+	# the channel is impassable except over the bridge (z -1.2 .. 1.7)
+	solid(Vector3(12.5, 0, -25.6), Vector2(2.4, 48.8))
+	solid(Vector3(12.5, 0, 16.2), Vector2(2.4, 29.0))
+	for zz in [-1.35, 1.85]:
+		solid(Vector3(12.5, 0, zz), Vector2(3.8, 0.2))
 	# vermilion arched bridge: deck + rails + posts
 	var wood := Mat.tex("wood")
 	var red := Mat.col(Color(0.72, 0.18, 0.12))
@@ -165,6 +193,7 @@ func _house(center: Vector3, size: Vector3, roof_tint: Color, kind: String, side
 	var stone := Mat.tex("stone")
 	# stone plinth, walls
 	box(Vector3(0, 0.15, 0), Vector3(w + 0.2, 0.3, d + 0.2), stone, Vector3.ZERO, root)
+	solid(Vector3.ZERO, Vector2(w + 0.2, d + 0.2), root)
 	box(Vector3(0, 0.3 + h * 0.5, 0), Vector3(w, h, d), plaster, Vector3.ZERO, root)
 	var fz := d * 0.5
 	# lower wooden wainscot (koshi-ita) all round the front
@@ -238,6 +267,7 @@ func _torii(pos: Vector3) -> void:
 	var black := Mat.col(Color(0.12, 0.1, 0.1))
 	for side in [-1.0, 1.0]:
 		cyl(pos + Vector3(side * 1.4, 1.7, 0), 0.14, 0.17, 3.4, red, 8)
+		solid(pos + Vector3(side * 1.4, 0, 0), Vector2(0.45, 0.45))
 		cyl(pos + Vector3(side * 1.4, 0.15, 0), 0.22, 0.22, 0.3, black, 8)
 	box(pos + Vector3(0, 2.75, 0), Vector3(3.6, 0.2, 0.24), red)
 	box(pos + Vector3(0, 3.45, 0), Vector3(4.4, 0.22, 0.32), red)
@@ -248,6 +278,7 @@ func _torii(pos: Vector3) -> void:
 func _stone_lantern(pos: Vector3) -> void:
 	var stone := Mat.tex("stone", Color(0.95, 0.95, 0.9))
 	box(pos + Vector3(0, 0.1, 0), Vector3(0.6, 0.2, 0.6), stone)
+	solid(pos, Vector2(0.6, 0.6))
 	cyl(pos + Vector3(0, 0.55, 0), 0.12, 0.14, 0.7, stone, 6)
 	box(pos + Vector3(0, 0.95, 0), Vector3(0.5, 0.12, 0.5), stone)
 	box(pos + Vector3(0, 1.15, 0), Vector3(0.38, 0.3, 0.38), stone)
@@ -266,6 +297,8 @@ func _teahouse_front(pos: Vector3) -> void:
 	var red := Mat.col(Color(0.78, 0.16, 0.16))
 	var wood := Mat.tex("wood")
 	box(pos + Vector3(-0.6, 0.42, 0.2), Vector3(1.8, 0.08, 0.6), red)
+	solid(pos + Vector3(-0.6, 0, 0.2), Vector2(1.8, 0.6))
+	solid(pos + Vector3(0.9, 0, 0.3), Vector2(0.2, 0.2))
 	for lx in [-1.3, 0.1]:
 		box(pos + Vector3(lx, 0.2, 0.2), Vector3(0.08, 0.4, 0.5), wood)
 	cyl(pos + Vector3(0.9, 1.1, 0.3), 0.03, 0.03, 2.2, Mat.col(Color(0.3, 0.2, 0.15)), 6)
@@ -277,6 +310,7 @@ func _well(pos: Vector3) -> void:
 	var stone := Mat.tex("stone")
 	var wood := Mat.tex("wood")
 	cyl(pos + Vector3(0, 0.35, 0), 0.6, 0.65, 0.7, stone, 10)
+	solid(pos, Vector2(1.4, 1.3))
 	cyl(pos + Vector3(0, 0.66, 0), 0.45, 0.45, 0.05, Mat.col(Color(0.08, 0.1, 0.14)), 10)
 	for sx in [-0.55, 0.55]:
 		box(pos + Vector3(sx, 1.0, 0), Vector3(0.1, 1.9, 0.1), wood)
@@ -293,7 +327,9 @@ func _props() -> void:
 	# barrels and crates by the tea house and the shop
 	for p in [Vector3(-11.6, 0, -2.6), Vector3(-11.0, 0, -2.2), Vector3(10.5, 0, -2.6)]:
 		cyl(p + Vector3(0, 0.4, 0), 0.32, 0.28, 0.8, wood, 10)
+		solid(p, Vector2(0.6, 0.6))
 		cyl(p + Vector3(0, 0.62, 0), 0.33, 0.33, 0.06, Mat.col(Color(0.2, 0.2, 0.22)), 10)
+	solid(Vector3(9.7, 0, -2.45), Vector2(0.6, 0.6))
 	for p in [Vector3(9.6, 0, -2.4), Vector3(9.8, 0.5, -2.5)]:
 		box(p + Vector3(0, 0.25, 0), Vector3(0.5, 0.5, 0.5), wood, Vector3(0, rng.randf_range(-15, 15), 0))
 	# bamboo fence along the front of the side house
@@ -302,15 +338,21 @@ func _props() -> void:
 		cyl(Vector3(-11.2, 0.55, 0.6 + i * 0.6 + 2.2), 0.05, 0.05, 1.1, bamboo, 6)
 	for y in [0.35, 0.85]:
 		box(Vector3(-11.2, y, 4.8), Vector3(0.06, 0.06, 5.2), Mat.col(Color(0.35, 0.28, 0.2)))
+	solid(Vector3(-11.2, 0, 5.0), Vector2(0.2, 5.4))
+
+
+func _tree(path: String, pos: Vector3, s: float, flip := false) -> void:
+	sprite(path, pos, s).set_flip(flip)
+	solid(pos, Vector2(0.5, 0.4) * s)
 
 
 func _foliage() -> void:
-	sprite("res://assets/sprites/tree_sakura.png", Vector3(-6.0, 0, -2.1), 1.15)
-	sprite("res://assets/sprites/tree_sakura.png", Vector3(16.5, 0, -3.5), 1.0).set_flip(true)
-	sprite("res://assets/sprites/tree_maple.png", Vector3(10.2, 0, -3.2), 1.0)
-	sprite("res://assets/sprites/tree_pine.png", Vector3(-15.5, 0, -4.5), 1.4)
-	sprite("res://assets/sprites/tree_pine.png", Vector3(5.2, 0, -8.6), 1.5)
-	sprite("res://assets/sprites/tree_pine.png", Vector3(-10.0, 0, -9.4), 1.6).set_flip(true)
+	_tree("res://assets/sprites/tree_sakura.png", Vector3(-6.0, 0, -2.1), 1.15)
+	_tree("res://assets/sprites/tree_sakura.png", Vector3(16.5, 0, -3.5), 1.0, true)
+	_tree("res://assets/sprites/tree_maple.png", Vector3(10.2, 0, -3.2), 1.0)
+	_tree("res://assets/sprites/tree_pine.png", Vector3(-15.5, 0, -4.5), 1.4)
+	_tree("res://assets/sprites/tree_pine.png", Vector3(5.2, 0, -8.6), 1.5)
+	_tree("res://assets/sprites/tree_pine.png", Vector3(-10.0, 0, -9.4), 1.6, true)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 99
 	for p in [Vector3(-5.2, 0, -3.4), Vector3(4.6, 0, -3.2), Vector3(-1.0, 0, -3.3), Vector3(6.5, 0, 2.9),
@@ -319,21 +361,18 @@ func _foliage() -> void:
 		b.set_flip(rng.randf() < 0.5)
 
 
-func _people() -> void:
-	_person("hero", Vector3(0.6, 0, 0.7), "down", 0, false)
-	_person("ronin", Vector3(-4.9, 0, -1.4), "side", 0, false)
-	_person("girl", Vector3(-7.3, 0, -1.9), "down", 0, false)
-	_person("elder", Vector3(-9.4, 0, -1.7), "down", 0, false)
-	_person("villager", Vector3(4.2, 0, 0.2), "side", 1, true)
-	_person("guard", Vector3(-1.7, 0, -11.6), "down", 0, false)
+## Walkable area of the post town: invisible walls around it.
+const BOUNDS := Rect2(-16.0, -12.5, 37.0, 18.0)   # x, z, width, depth
 
 
-func _person(id: String, pos: Vector3, facing: String, frame: int, flip: bool) -> PixelSprite:
-	var s := sprite("res://assets/sprites/char_%s.png" % id, pos, 1.0, CHAR_W, CHAR_H)
-	s.set_frame(frame, ROW[facing])
-	s.set_flip(flip)
-	characters[id] = s
-	return s
+func _bounds() -> void:
+	var b := BOUNDS
+	var cx := b.position.x + b.size.x * 0.5
+	var cz := b.position.y + b.size.y * 0.5
+	solid(Vector3(cx, 0, b.position.y - 0.5), Vector2(b.size.x + 2.0, 1.0))
+	solid(Vector3(cx, 0, b.end.y + 0.5), Vector2(b.size.x + 2.0, 1.0))
+	solid(Vector3(b.position.x - 0.5, 0, cz), Vector2(1.0, b.size.y + 2.0))
+	solid(Vector3(b.end.x + 0.5, 0, cz), Vector2(1.0, b.size.y + 2.0))
 
 
 func _particles() -> void:
