@@ -45,6 +45,26 @@ func press(action: String) -> void:
 	await get_tree().process_frame
 
 
+func talk_through() -> void:
+	await press("interact")
+	var n := 0
+	while main.dialogue.open and n < 40:
+		await press("interact")
+		n += 1
+	await physics(2)
+
+
+func wait_duel_input() -> void:
+	## Waits until the duel wants input again (or is over).
+	var stage: DuelStage = main.stage
+	for _f in 4000:
+		await get_tree().process_frame
+		if not stage.active and (not main.player.frozen or main.dialogue.open):
+			return
+		if stage.active and not stage.busy:
+			return
+
+
 func teleport(p: Vector3) -> void:
 	main.player.position = p
 	main.player.velocity = Vector3.ZERO
@@ -167,6 +187,107 @@ func run(m: Node) -> void:
 	await teleport(Vector3(-4.9, 0, 0.2))
 	await hold("move_up", 60)
 	check(pl.position.z > -1.4 + 0.3, "can't walk through the ronin (z=%.2f)" % pl.position.z)
+
+
+	# =====================================================================
+	# DUELS
+	# =====================================================================
+	main.anim_speed = 0.02
+	main.duel_seed = 4242
+	var stage: DuelStage = main.stage
+	var tetsu: Npc = main.npcs["tetsu"]
+
+	# --- the challenge comes through a dialogue choice ---
+	await teleport(Vector3(-4.9, 0, -0.6))
+	await talk_through()                       # first conversation
+	check(tetsu.times_talked == 1, "talked to Tetsu once")
+	await press("interact")                    # second: ends in a choice
+	var guard_presses := 0
+	while main.dialogue.open and not main.dialogue.choosing and guard_presses < 30:
+		await press("interact")
+		guard_presses += 1
+	check(main.dialogue.choosing, "Tetsu's second talk ends in a choice")
+	await press("move_down")
+	check(main.dialogue.choice_index == 1, "choice cursor moves down")
+	await press("move_up")
+	check(main.dialogue.choice_index == 0, "choice cursor moves up")
+	await press("interact")
+	await wait_duel_input()
+	check(stage.active, "choosing 'Desembainhar' starts the duel")
+	check(pl.in_combat() and tetsu.in_combat(), "both fighters switch to combat sprites")
+	check(main.cam.global_position.distance_to(stage.center) < 9.0, "camera moves in to frame the duel")
+	check(absf(pl.position.x - (stage.center.x - DuelStage.SPACING)) < 0.05, "hero walked to his mark")
+	check(main.hint.text == "", "exploration hint hidden during the duel")
+
+	# --- real input on the menu: first item is a quick strike ---
+	var turn0 := stage.duel.turn
+	await press("interact")
+	await wait_duel_input()
+	check(stage.duel.turn == turn0 + 1, "pressing E on the menu plays a turn")
+
+	# --- a boca resolves without ending the turn and costs ki ---
+	stage.duel.hero.ki = 50
+	var t1 := stage.duel.turn
+	stage._on_picked("boca_menu", 0)
+	check(stage.in_boca_menu, "boca submenu opens")
+	check(stage.ui.menu_box.get_child_count() == Bocas.ORDER.size() + 1, "submenu lists every boca + back")
+	await press("cancel")
+	check(not stage.in_boca_menu, "Esc backs out of the boca menu")
+	stage.pick_boca(Bocas.Cat.TROCA)
+	await wait_duel_input()
+	check(stage.duel.turn == t1 and stage.duel.hero.ki == 50 - Duel.BOCA_KI, "boca: same turn, -%d ki" % Duel.BOCA_KI)
+	check(stage.duel.foe.times_heard(Bocas.Cat.TROCA) == 1, "Tetsu heard the troça")
+	check(not stage.duel.can_boca(), "boca option locked for the rest of the turn")
+	var boca_btn: Button = stage.ui.menu_box.get_child(5)
+	check(boca_btn.disabled, "Boca button greyed out after use")
+
+	# --- finish him ---
+	stage.duel.foe.hp = 1
+	var guard_turns := 0
+	while stage.active and guard_turns < 20:
+		stage.pick(Duel.Act.TECH if stage.duel.can_use(Duel.Act.TECH) else Duel.Act.LIGHT)
+		await wait_duel_input()
+		guard_turns += 1
+	check(not stage.active, "duel ends")
+	check(main.last_duel_result == Duel.Result.WIN, "won the duel (result %d)" % main.last_duel_result)
+	await physics(10)
+	check(not pl.in_combat() and not tetsu.in_combat(), "fighters back to walking sprites")
+	check(tetsu.state == "vencido" and tetsu.lines() == NpcData.TOWN.tetsu.beaten, "beaten Tetsu has new lines")
+	check(tetsu.display_name == "Tetsu", "Tetsu's name is now known")
+	check(not pl.frozen, "player free after the duel")
+	var px := pl.position.x
+	await hold("move_left", 15)
+	check(pl.position.x < px - 0.3, "player can walk after the duel")
+
+	# --- losing: wake up at the tea house ---
+	var guarda: Npc = main.npcs["guarda"]
+	await teleport(Vector3(-3.0, 0, -10.2))
+	await talk_through()
+	await press("interact")
+	while main.dialogue.open and not main.dialogue.choosing:
+		await press("interact")
+	main.dialogue.choose(0)
+	await wait_duel_input()
+	check(stage.active and stage.foe == guarda, "forcing the shrine path starts a duel with the guard")
+	stage.duel.hero.hp = 1
+	stage.duel.foe.atk = 99
+	var lose_turns := 0
+	while stage.active and lose_turns < 30:
+		stage.pick(Duel.Act.OBSERVE)
+		await wait_duel_input()
+		lose_turns += 1
+	check(main.last_duel_result == Duel.Result.LOSE, "lost the duel (result %d)" % main.last_duel_result)
+	for _f in 400:
+		if main.dialogue.open:
+			break
+		await get_tree().process_frame
+	check(main.dialogue.open and main.dialogue.lines == NpcData.WAKE_LINES, "waking up at the tea house")
+	check(pl.position.distance_to(NpcData.WAKE_POS) < 0.1, "player moved to the tea house")
+	while main.dialogue.open:
+		await press("interact")
+	for _f in 60:
+		await get_tree().process_frame
+	check(not pl.frozen and guarda.state == "", "free again; the guard still stands")
 
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit(0 if ok else 1)

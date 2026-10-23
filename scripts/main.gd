@@ -21,6 +21,12 @@ var npcs := {}
 var talking_to: Npc = null
 var _title: Label
 var hint: Label
+var stage: DuelStage
+var anim_speed := 1.0           # tests shrink this to fast-forward duels
+var duel_seed := -1             # fixed by tests; -1 = random
+var last_duel_result := -1
+var _pending_duel := ""
+var _fade: ColorRect
 
 
 func _ready() -> void:
@@ -61,6 +67,10 @@ func _ready() -> void:
 	dialogue = DialogueBox.new()
 	add_child(dialogue)
 	dialogue.finished.connect(_on_dialogue_finished)
+	dialogue.choice_made.connect(_on_choice)
+	stage = DuelStage.new(self)
+	add_child(stage)
+	stage.finished.connect(_on_duel_finished)
 
 	var args := OS.get_cmdline_user_args()
 	var look := "dourado"
@@ -93,6 +103,9 @@ func _focus_point() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	if stage.active:
+		hint.text = ""
+		return
 	var target := _focus_point() + CAM_OFFSET
 	cam.position = cam.position.lerp(target, 1.0 - exp(-CAM_FOLLOW * delta))
 	var f: Npc = player.focus
@@ -119,6 +132,63 @@ func _on_dialogue_finished() -> void:
 		talking_to.return_home()
 	talking_to = null
 	player.frozen = false
+	if _pending_duel != "":
+		var id := _pending_duel
+		_pending_duel = ""
+		start_duel(id)
+
+
+func _on_choice(tag: String) -> void:
+	if tag.begins_with("duel:"):
+		_pending_duel = tag.substr(5)
+
+
+# ---------------------------------------------------------------------------
+# duels
+# ---------------------------------------------------------------------------
+func start_duel(id: String) -> void:
+	var npc: Npc = npcs[id]
+	player.frozen = true
+	player.set_physics_process(false)
+	npc.show_prompt(false)
+	stage.seed_value = duel_seed if duel_seed >= 0 else randi()
+	stage.start(id, npc, NpcData.TOWN[id].duel_spot)
+
+
+func _on_duel_finished(result: int, id: String) -> void:
+	last_duel_result = result
+	var npc: Npc = npcs[id]
+	if result == Duel.Result.WIN or result == Duel.Result.SURRENDER:
+		npc.state = "vencido"
+		var short_name: String = Foes.ALL[id].name.get_slice(",", 0)
+		npc.display_name = short_name
+		npc.home = NpcData.TOWN[id].get("beaten_pos", npc.home)
+	# the foe walks back to his post
+	var t := create_tween()
+	t.tween_property(npc, "position", npc.home, 0.6 * anim_speed)
+	await t.finished
+	npc.return_home()
+	if result == Duel.Result.LOSE:
+		await _wake_at_teahouse()
+	player.snap_to_ground()
+	player.set_physics_process(true)
+	player.frozen = false
+
+
+func _wake_at_teahouse() -> void:
+	var t := create_tween()
+	t.tween_property(_fade, "color:a", 1.0, 0.6 * anim_speed)
+	await t.finished
+	player.position = NpcData.WAKE_POS
+	player.face_dir(Vector3.FORWARD)
+	snap_camera()
+	await get_tree().create_timer(0.5 * anim_speed).timeout
+	var t2 := create_tween()
+	t2.tween_property(_fade, "color:a", 0.0, 0.8 * anim_speed)
+	await t2.finished
+	player.frozen = true
+	dialogue.start(NpcData.WAKE_LINES)
+	await dialogue.finished
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +227,11 @@ func _build_overlay() -> void:
 	hint.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.12))
 	hint.add_theme_constant_override("outline_size", 8)
 	layer.add_child(hint)
+	_fade = ColorRect.new()
+	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade.color = Color(0, 0, 0, 0)
+	layer.add_child(_fade)
 	add_child(layer)
 
 
@@ -229,4 +304,32 @@ func _shots(dir: String) -> void:
 	snap_camera()
 	await _wait(40)
 	_save_shot(dir, "shot_bridge_night.png")
+	# 4. a duel with Tetsu on the main street
+	Look.apply("dourado", env, sun, village)
+	duel_seed = 7
+	player.position = Vector3(-4.9, 0, -0.6)
+	snap_camera()
+	await _wait(5)
+	start_duel("tetsu")
+	await stage.awaiting_input
+	await _wait(20)
+	_save_shot(dir, "shot_duel_menu.png")
+	stage._on_picked("boca_menu", 0)
+	await _wait(10)
+	_save_shot(dir, "shot_duel_boca.png")
+	stage.pick_boca(Bocas.Cat.INSULTO)
+	await get_tree().create_timer(1.0).timeout
+	_save_shot(dir, "shot_duel_boca_line.png")
+	await get_tree().create_timer(1.9).timeout
+	_save_shot(dir, "shot_duel_boca_reply.png")
+	await stage.awaiting_input
+	await _wait(10)
+	_save_shot(dir, "shot_duel_after_boca.png")
+	stage.pick(Duel.Act.HEAVY)
+	await get_tree().create_timer(0.66).timeout
+	_save_shot(dir, "shot_duel_strike.png")
+	await stage.awaiting_input
+	stage._on_picked("boca_menu", 0)
+	await _wait(10)
+	_save_shot(dir, "shot_duel_boca_known.png")
 	get_tree().quit(0)

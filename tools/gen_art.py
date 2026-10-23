@@ -50,6 +50,8 @@ class Sprite:
         self.ramps: list = [None]
         self.names: dict[str, int] = {}
         self.flat = np.zeros((h, w), dtype=bool)      # pixels that skip shading
+        self.ox = 0                                    # drawing offset (wide combat canvases)
+        self.oy = 0
 
     def region(self, name: str, rmp) -> int:
         if name not in self.names:
@@ -62,23 +64,29 @@ class Sprite:
         draw_fn(ImageDraw.Draw(img))
         return np.array(img) > 0
 
+    def _o(self, pts):
+        return [(p[0] + self.ox, p[1] + self.oy) for p in pts]
+
     def poly(self, name, pts, flat=False):
-        m = self._mask(lambda d: d.polygon([tuple(p) for p in pts], fill=255))
+        m = self._mask(lambda d: d.polygon(self._o(pts), fill=255))
         self._apply(name, m, flat)
 
     def rect(self, name, x0, y0, x1, y1, flat=False):
-        m = self._mask(lambda d: d.rectangle([x0, y0, x1, y1], fill=255))
+        o = self._o([(x0, y0), (x1, y1)])
+        m = self._mask(lambda d: d.rectangle([o[0], o[1]], fill=255))
         self._apply(name, m, flat)
 
     def ellipse(self, name, cx, cy, rx, ry, flat=False):
+        cx, cy = cx + self.ox, cy + self.oy
         m = self._mask(lambda d: d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=255))
         self._apply(name, m, flat)
 
     def line(self, name, pts, width=1, flat=False):
-        m = self._mask(lambda d: d.line([tuple(p) for p in pts], fill=255, width=width))
+        m = self._mask(lambda d: d.line(self._o(pts), fill=255, width=width))
         self._apply(name, m, flat)
 
     def px(self, name, x, y, flat=True):
+        x, y = x + self.ox, y + self.oy
         if 0 <= x < self.w and 0 <= y < self.h:
             self.reg[y, x] = self.names[name]
             self.flat[y, x] = flat
@@ -307,7 +315,7 @@ def _build_front(s: Sprite, a, step, y0, back=False):
                 s.line("weave", [(16, 2 + y0), (6 + i * 7, 10 + y0)], flat=True)
 
 
-def _build_side(s: Sprite, a, step, y0):
+def _build_side(s: Sprite, a, step, y0, arm=True, waist_hilt=True, kneel=False):
     # facing right
     # sword scabbard sticks out behind (left)
     if a["sword"]:
@@ -316,6 +324,9 @@ def _build_side(s: Sprite, a, step, y0):
     if a["skirt"]:
         s.poly("kimono", [(11, 30 + y0), (21, 30 + y0), (21, 44), (11, 44)])
         s.rect("sandal", 13 + step, 44, 19 + step, 45)
+    elif a["hakama"] is not None and kneel:
+        s.poly("hakama", [(8, 31 + y0), (22, 31 + y0), (25, 44), (6, 44)])
+        s.rect("sandal", 3, 42, 8, 44)
     elif a["hakama"] is not None:
         s.poly("hakama", [(11, 30 + y0), (21, 30 + y0), (23 + step * 2, 43), (9 - step * 2, 43)])
         s.region("pleat", (a["hakama"][1],) * 3)
@@ -334,9 +345,10 @@ def _build_side(s: Sprite, a, step, y0):
     if a["skirt"]:
         s.poly("obi", [(8, 26 + y0), (12, 26 + y0), (12, 32 + y0), (7, 32 + y0)])
     # arm / sleeve in front
-    s.poly("kimono", [(13, 20 + y0), (19, 20 + y0), (19 + step, 31 + y0), (13 + step, 32 + y0)])
-    s.ellipse("skin", 17 + step, 33 + y0, 1.6, 1.6)
-    if a["sword"]:
+    if arm:
+        s.poly("kimono", [(13, 20 + y0), (19, 20 + y0), (19 + step, 31 + y0), (13 + step, 32 + y0)])
+        s.ellipse("skin", 17 + step, 33 + y0, 1.6, 1.6)
+    if a["sword"] and waist_hilt:
         s.line("tsuka", [(20, 28 + y0), (27, 25 + y0)], width=2)
         s.rect("gold", 19, 28 + y0, 20, 29 + y0, flat=True)
     # head
@@ -365,6 +377,123 @@ def _build_side(s: Sprite, a, step, y0):
             s.region("weave", (a["hat"][1],) * 3)
             for i in range(4):
                 s.line("weave", [(16, 2 + y0), (6 + i * 7, 10 + y0)], flat=True)
+
+
+COMBAT_POSES = ("ready", "raise", "slash", "guard", "hurt", "down")
+COMBAT_W = 64
+
+
+def _arm_and_blade(s: Sprite, shoulder, hand, blade_to, y0=0, hilt_len=3):
+    """Sleeve from the shoulder to the hands, then hilt + guard + blade."""
+    sx, sy = shoulder
+    hx, hy = hand
+    sy += y0
+    hy += y0
+    bx, by = blade_to[0], blade_to[1] + y0
+    # sleeve as a thick quad
+    dx, dy = hx - sx, hy - sy
+    ln = max(1.0, math.hypot(dx, dy))
+    nx, ny = -dy / ln * 3.0, dx / ln * 3.0
+    s.poly("kimono", [(sx + nx, sy + ny), (sx - nx, sy - ny), (hx - nx * 0.6, hy - ny * 0.6), (hx + nx * 0.6, hy + ny * 0.6)])
+    # blade direction
+    vx, vy = bx - hx, by - hy
+    vl = max(1.0, math.hypot(vx, vy))
+    ux, uy = vx / vl, vy / vl
+    tx, ty = hx - ux * hilt_len, hy - uy * hilt_len
+    s.line("tsuka", [(round(tx), round(ty)), (round(hx + ux), round(hy + uy))], width=2)
+    gx, gy = round(hx + ux * 2), round(hy + uy * 2)
+    s.rect("gold", gx - 1, gy - 1, gx, gy, flat=True)
+    s.line("blade", [(gx + round(ux), gy + round(uy)), (round(bx), round(by))], width=2)
+    s.line("edge", [(gx + round(ux * 2), gy + round(uy * 2) - (1 if abs(ux) > abs(uy) else 0)),
+                    (round(bx), round(by) - (1 if abs(ux) > abs(uy) else 0))], flat=True)
+    s.ellipse("skin", hx, hy, 1.7, 1.7)
+
+
+def build_combat(arch: str, pose: str) -> Image.Image:
+    """Side view (facing right) on a 64x48 canvas; the body sits where it does
+    in the 32-wide walk sheet (x offset 16) so both sheets share a pivot."""
+    a = ARCHETYPES[arch]
+    s = Sprite(COMBAT_W, CH)
+    s.ox = 16
+    for name in ("kimono", "trim", "obi", "hair", "skin"):
+        s.region(name, a[name])
+    s.region("skin_d", (a["skin"][1], a["skin"][1], a["skin"][0]))
+    s.region("hakama", a["hakama"] or a["kimono"])
+    for name, r in (("eye", EYE), ("white", WHITE), ("steel", STEEL), ("gold", GOLD), ("sandal", SANDAL)):
+        s.region(name, r)
+    s.region("saya", ramp("#2a2026", "#160f14", "#4a3a44"))
+    s.region("tsuka", ramp("#3a3448", "#201c2a", "#6a6080"))
+    s.region("blade", ramp("#aab6c0", "#6c7884", "#e8f0f6"))
+    s.region("edge", ((246, 250, 255),) * 3)
+    if a.get("hat"):
+        s.region("hat", a["hat"])
+    if a.get("headband"):
+        s.region("band", a["headband"])
+    y0 = 7 if pose == "down" else 0
+    _build_side(s, a, 0, y0, arm=False, waist_hilt=False, kneel=(pose == "down"))
+    sh = (16, 21)
+    if pose == "ready":       # chudan: blade forward and up, aimed at the throat
+        _arm_and_blade(s, sh, (23, 29), (38, 16))
+    elif pose == "raise":     # jodan: hands over the head, blade back
+        _arm_and_blade(s, sh, (19, 7), (2, 10))
+    elif pose == "slash":     # follow-through: arms extended, blade level
+        _arm_and_blade(s, sh, (28, 28), (47, 31))
+    elif pose == "guard":     # vertical guard in front of the body
+        _arm_and_blade(s, sh, (24, 27), (27, 6))
+    elif pose == "hurt":      # recoil: blade drops
+        _arm_and_blade(s, sh, (22, 31), (34, 41))
+    elif pose == "down":      # kneeling, blade planted
+        _arm_and_blade(s, sh, (23, 30), (31, 40), y0=y0)
+    img = s.render()
+    if pose == "hurt":        # lean the upper body back
+        arr = np.array(img)
+        top = arr[:30].copy()
+        arr[:30] = 0
+        arr[:30, :-3] = top[:, 3:]
+        img = Image.fromarray(arr, "RGBA")
+    return img
+
+
+def combat_sheet(arch: str) -> Image.Image:
+    sheet = Image.new("RGBA", (COMBAT_W * len(COMBAT_POSES), CH), (0, 0, 0, 0))
+    for i, pose in enumerate(COMBAT_POSES):
+        sheet.paste(build_combat(arch, pose), (i * COMBAT_W, 0))
+    return sheet
+
+
+def fx_slash() -> Image.Image:
+    """Crescent sword-trail, white core fading to steel blue."""
+    w, h = 64, 64
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    cx, cy = 18, 32
+    for y in range(h):
+        for x in range(w):
+            r = math.hypot(x - cx, y - cy)
+            ang = math.degrees(math.atan2(y - cy, x - cx))
+            if -75 <= ang <= 75:
+                t = 1 - abs(ang) / 75.0                      # thick in the middle
+                inner, outer = 34 - 6 * t, 36 + 3 * t
+                if inner <= r <= outer:
+                    k = (r - inner) / max(0.1, outer - inner)
+                    col = (255, 255, 255) if k > 0.45 else (190, 220, 255)
+                    arr[y, x, :3] = col
+                    arr[y, x, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def fx_hit() -> Image.Image:
+    """Four-point impact star."""
+    w = 24
+    arr = np.zeros((w, w, 4), dtype=np.uint8)
+    c = w // 2
+    for y in range(w):
+        for x in range(w):
+            dx, dy = abs(x - c), abs(y - c)
+            if (dx <= 1 and dy <= 10 - dx * 3) or (dy <= 1 and dx <= 10 - dy * 3) or (dx == dy and dx <= 4):
+                core = dx <= 1 and dy <= 1 or dx + dy <= 3
+                arr[y, x, :3] = (255, 255, 255) if core else (255, 214, 120)
+                arr[y, x, 3] = 255
+    return Image.fromarray(arr, "RGBA")
 
 
 def character_sheet(arch: str) -> Image.Image:
@@ -622,6 +751,10 @@ def main():
     os.makedirs(TEX, exist_ok=True)
     for arch in ARCHETYPES:
         character_sheet(arch).save(os.path.join(SPR, f"char_{arch}.png"))
+        if ARCHETYPES[arch]["sword"]:
+            combat_sheet(arch).save(os.path.join(SPR, f"combat_{arch}.png"))
+    fx_slash().save(os.path.join(SPR, "fx_slash.png"))
+    fx_hit().save(os.path.join(SPR, "fx_hit.png"))
     sakura().save(os.path.join(SPR, "tree_sakura.png"))
     pine().save(os.path.join(SPR, "tree_pine.png"))
     maple().save(os.path.join(SPR, "tree_maple.png"))

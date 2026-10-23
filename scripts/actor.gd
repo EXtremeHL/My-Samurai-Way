@@ -50,6 +50,44 @@ func animate(moving: bool, delta: float, speed_scale := 1.0) -> void:
 	_apply_frame()
 
 
+# ---------------------------------------------------------------------------
+# combat presentation: a second, wider sheet with sword poses
+# ---------------------------------------------------------------------------
+const POSES := ["ready", "raise", "slash", "guard", "hurt", "down"]
+var combat_sprite: PixelSprite
+
+
+func enter_combat(sheet_id: String, face_left: bool) -> void:
+	if combat_sprite == null:
+		combat_sprite = PixelSprite.make("res://assets/sprites/combat_%s.png" % sheet_id, 64, 48)
+		add_child(combat_sprite)
+	combat_sprite.visible = true
+	sprite.visible = false
+	combat_sprite.set_flip(face_left)
+	pose("ready")
+
+
+func exit_combat() -> void:
+	if combat_sprite:
+		combat_sprite.visible = false
+		set_flash(0.0)
+	sprite.visible = true
+
+
+func in_combat() -> bool:
+	return combat_sprite != null and combat_sprite.visible
+
+
+func pose(p: String) -> void:
+	if combat_sprite:
+		combat_sprite.set_frame(POSES.find(p), 0)
+
+
+func set_flash(v: float) -> void:
+	if combat_sprite:
+		combat_sprite.set_flash(v)
+
+
 func snap_to_ground() -> void:
 	position.y = Village.ground_height(position)
 

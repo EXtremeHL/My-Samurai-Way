@@ -42,12 +42,20 @@ const TOWN := {
 			["Ronin de chapéu de palha", "..."],
 			["Ronin de chapéu de palha", "Mais um ronin com fome. O vale está cheio deles."],
 			["Ronin de chapéu de palha", "O chefe Kuroda paga bem a quem sabe segurar uma espada. Mesmo partida."],
+			["Ronin de chapéu de palha", "Eu? Eu sou o Tetsu. Ninguém em Kurogane me venceu. Ninguém. Pergunta a quem quiseres."],
 			["Tu", "E se eu não quiser trabalhar para o Corvo?"],
 			["Ronin de chapéu de palha", "Então reza para não te cruzares comigo depois do pôr do sol."],
 		],
 		"again": [
 			["Ronin de chapéu de palha", "Ainda aqui? Pensa na proposta. O Corvo não pergunta duas vezes."],
+			["Ronin de chapéu de palha", "Ou queres mostrar-me o que vale essa meia espada?"],
+			{"choice": ["Desembainhar a espada", "Ir embora"], "tags": ["duel:tetsu", ""]},
 		],
+		"beaten": [
+			["Tetsu", "...Ganhaste. Desta vez."],
+			["Tetsu", "O chefe Kuroda vai querer conhecer o vagabundo que me pôs de joelhos. Prepara-te."],
+		],
+		"duel_spot": Vector3(-4.6, 0, 0.35),
 	},
 	"heita": {
 		"name": "Heita", "sheet": "villager", "pos": Vector3(4.2, 0, 0.2),
@@ -67,11 +75,25 @@ const TOWN := {
 			["Guarda do Magistrado", "Alto! O caminho do santuário está fechado por ordem do Magistrado Akamatsu."],
 			["Tu", "Porquê?"],
 			["Guarda do Magistrado", "Porque o Magistrado assim o quer. Precisas de mais razões, vagabundo?"],
+			["", "A mão dele treme no cabo da espada. Os olhos não param de procurar os outros guardas."],
 		],
 		"again": [
-			["Guarda do Magistrado", "Ainda aqui? Desaparece, antes que eu te prenda por vadiagem."],
+			["Guarda do Magistrado", "Ainda aqui? D-desaparece, antes que eu te prenda por vadiagem."],
+			{"choice": ["Forçar a passagem", "Recuar"], "tags": ["duel:guarda", ""]},
 		],
+		"beaten": [
+			["Guarda do Magistrado", "Eu não vi nada! Passa, passa... mas o Magistrado vai saber disto."],
+		],
+		"duel_spot": Vector3(-3.0, 0, -10.1),
+		"beaten_pos": Vector3(-4.5, 0, -11.2),
 	},
 }
 
 const PLAYER_START := Vector3(0.6, 0, 0.7)
+const WAKE_POS := Vector3(-7.3, 0, -0.7)
+
+const WAKE_LINES := [
+	["", "..."],
+	["Oyuki", "Ah, acordaste! Encontrei-te estendido no meio da rua."],
+	["Oyuki", "Quem quer que tenha sido, não te quis matar. Ainda. Bebe este chá e não faças mais disparates... hoje."],
+]

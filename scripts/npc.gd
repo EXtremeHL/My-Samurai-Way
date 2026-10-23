@@ -4,6 +4,9 @@ extends Actor
 
 var npc_id := ""
 var display_name := ""
+var data: Dictionary = {}
+var state := ""                 # "" | "vencido"
+var home := Vector3.ZERO
 var lines_first: Array = []
 var lines_again: Array = []
 var times_talked := 0
@@ -15,7 +18,9 @@ var _prompt: Label3D
 func setup(id: String, data: Dictionary) -> void:
 	npc_id = id
 	name = "Npc_" + id
+	self.data = data
 	display_name = data.name
+	home = data.pos
 	lines_first = data.first
 	lines_again = data.get("again", data.first)
 	position = data.pos
@@ -42,6 +47,8 @@ func setup(id: String, data: Dictionary) -> void:
 
 
 func lines() -> Array:
+	if state == "vencido" and data.has("beaten"):
+		return data.beaten
 	return lines_first if times_talked == 0 else lines_again
 
 

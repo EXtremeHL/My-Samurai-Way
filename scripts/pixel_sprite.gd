@@ -46,5 +46,9 @@ func set_flip(on: bool) -> void:
 	_mat.set_shader_parameter("flip_h", 1.0 if on else 0.0)
 
 
+func set_flash(v: float) -> void:
+	_mat.set_shader_parameter("flash", v)
+
+
 func set_tint(c: Color) -> void:
 	_mat.set_shader_parameter("tint", Vector3(c.r, c.g, c.b))
