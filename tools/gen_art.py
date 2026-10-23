@@ -1,4 +1,4 @@
-"""Procedural pixel-art generator for O Caminho do Ronin (HD-2D).
+"""Procedural pixel-art generator for My Samurai Way (HD-2D).
 
 Everything is authored in code and seeded, so running this script always
 produces byte-identical PNGs.
@@ -180,6 +180,19 @@ ARCHETYPES = {
     "elder": dict(kimono=ramp("#5e7258"), trim=ramp("#d0ccb8"), hakama=ramp("#6a6258"),
                   obi=ramp("#3a3430"), hair=HAIR_GREY, skin=SKIN_DARK, sword=False,
                   hat=None, topknot=True, headband=None, skirt=False),
+    # Corvo thug: drab brown, blood-red headband
+    "bandit": dict(kimono=ramp("#6a5a48"), trim=ramp("#a89878"), hakama=ramp("#4a4038"),
+                   obi=ramp("#8a3a2a"), hair=HAIR_BLACK, skin=SKIN_DARK, sword=True,
+                   hat=None, topknot=False, headband=ramp("#b83a2a"), skirt=False),
+    # Kuroda Jinbei, head of the Corvo: black with red trim, long tied hair
+    "kuroda": dict(kimono=ramp("#25222c", "#121016", "#45404e"), trim=ramp("#b0302a"),
+                   hakama=ramp("#2e2a36"), obi=ramp("#c8a040"), hair=HAIR_BLACK, skin=SKIN,
+                   sword=True, hat=None, topknot=False, headband=None, skirt=False, wild=True),
+    # Magistrate Akamatsu: rich purple, gold, tall black eboshi
+    "akamatsu": dict(kimono=ramp("#5a3a7a"), trim=ramp("#e0c070"), hakama=ramp("#3a2a4a"),
+                     obi=ramp("#e0c070"), hair=HAIR_BLACK, skin=SKIN, sword=True,
+                     hat=ramp("#1e1c22", "#0e0d10", "#3c3a44"), topknot=False, headband=None,
+                     skirt=False, eboshi=True),
 }
 
 CW, CH = 32, 48
@@ -293,6 +306,20 @@ def _build_front(s: Sprite, a, step, y0, back=False):
         s.line("brow", [(18, 11 + y0), (20, 11 + y0)], flat=True)
         s.region("mouth", (a["skin"][1],) * 3)
         s.line("mouth", [(15, 16 + y0), (17, 16 + y0)], flat=True)
+    if a.get("wild"):
+        # loose, spiky mane: a boss silhouette
+        s.poly("hair", [(7, 10 + y0), (8, 2 + y0), (11, 5 + y0), (13, 0 + y0), (16, 4 + y0),
+                        (19, 0 + y0), (21, 5 + y0), (24, 2 + y0), (25, 10 + y0)])
+        if not back:
+            s.ellipse("skin", cx, 13 + y0, 6, 5.2)
+            s.poly("hair", [(9, 8 + y0), (23, 8 + y0), (22, 11 + y0), (18, 9 + y0), (15, 12 + y0), (12, 9 + y0), (10, 11 + y0)])
+            for ex in (13, 19):
+                s.px("eye", ex, 13 + y0)
+                s.px("eye", ex, 14 + y0)
+            s.line("brow", [(12, 11 + y0), (14, 12 + y0)], flat=True)
+            s.line("brow", [(18, 12 + y0), (20, 11 + y0)], flat=True)
+            s.region("scar", ((200, 90, 90),) * 3)
+            s.line("scar", [(18, 10 + y0), (20, 15 + y0)], flat=True)
     if a["topknot"]:
         s.rect("hair", 14, 2 + y0, 18, 5 + y0)
         s.line("white", [(14, 5 + y0), (18, 5 + y0)], flat=True)
@@ -303,7 +330,11 @@ def _build_front(s: Sprite, a, step, y0, back=False):
         else:
             s.line("band", [(17, 9 + y0), (20, 13 + y0)])
     if a.get("hat"):
-        if a.get("jingasa"):
+        if a.get("eboshi"):
+            # tall court cap
+            s.poly("hat", [(11, 8 + y0), (21, 8 + y0), (20, 0 + y0), (12, 1 + y0)])
+            s.line("hat", [(10, 8 + y0), (22, 8 + y0)])
+        elif a.get("jingasa"):
             # flat lacquered war hat
             s.poly("hat", [(4, 9 + y0), (28, 9 + y0), (24, 5 + y0), (8, 5 + y0)])
             s.ellipse("gold", 16, 6 + y0, 1.5, 1.2, flat=True)
@@ -363,6 +394,13 @@ def _build_side(s: Sprite, a, step, y0, arm=True, waist_hilt=True, kneel=False):
     s.region("brow", (a["hair"][1],) * 3)
     s.line("brow", [(19, 11 + y0), (21, 11 + y0)], flat=True)
     s.px("skin", 23, 14 + y0, flat=False)   # nose
+    if a.get("wild"):
+        s.poly("hair", [(8, 12 + y0), (5, 4 + y0), (9, 5 + y0), (10, 0 + y0), (13, 4 + y0),
+                        (16, 0 + y0), (18, 4 + y0), (21, 2 + y0), (21, 9 + y0), (15, 9 + y0), (14, 13 + y0)])
+        s.px("eye", 20, 13 + y0)
+        s.px("eye", 20, 14 + y0)
+        s.region("scar", ((200, 90, 90),) * 3)
+        s.line("scar", [(19, 10 + y0), (21, 15 + y0)], flat=True)
     if a["topknot"]:
         s.rect("hair", 11, 3 + y0, 15, 6 + y0)
         s.line("white", [(14, 3 + y0), (14, 6 + y0)], flat=True)
@@ -370,7 +408,9 @@ def _build_side(s: Sprite, a, step, y0, arm=True, waist_hilt=True, kneel=False):
         s.rect("band", 9, 8 + y0, 22, 9 + y0)
         s.line("band", [(9, 9 + y0), (6, 13 + y0)])
     if a.get("hat"):
-        if a.get("jingasa"):
+        if a.get("eboshi"):
+            s.poly("hat", [(10, 8 + y0), (19, 8 + y0), (16, 0 + y0), (9, 2 + y0)])
+        elif a.get("jingasa"):
             s.poly("hat", [(4, 9 + y0), (27, 9 + y0), (23, 5 + y0), (8, 5 + y0)])
         else:
             s.poly("hat", [(3, 11 + y0), (28, 11 + y0), (16, 1 + y0)])
@@ -742,6 +782,45 @@ def tex_water():
     return Image.fromarray(arr, "RGB")
 
 
+def tex_banner():
+    """Corvo war banner: black cloth, white circle, black crow."""
+    w, h = 32, 64
+    arr = np.zeros((h, w, 3), dtype=np.uint8)
+    arr[:] = hexc("#1c1a20")
+    for y in range(h):
+        for x in range(w):
+            if (x - 16) ** 2 + (y - 22) ** 2 <= 11 ** 2:
+                arr[y, x] = hexc("#e8e0d0")
+    crow = [
+        "......XXX.......",
+        ".....XXXXX......",
+        "XXX..XXXXXX.....",
+        ".XXXXXXXXXXXX...",
+        "..XXXXXXXXXXXXX.",
+        "...XXXXXXXXX..XX",
+        "....XXXXXX......",
+        ".....X...X......",
+        ".....X...X......",
+    ]
+    for j, row in enumerate(crow):
+        for i, ch in enumerate(row):
+            if ch == "X":
+                arr[17 + j, 8 + i] = hexc("#141216")
+    arr[:, 0] = hexc("#a02a24")
+    arr[:, w - 1] = hexc("#a02a24")
+    for y in range(44, 64, 4):
+        arr[y, :] = hexc("#2a262e")
+    return Image.fromarray(arr, "RGB")
+
+
+def tex_canvas():
+    size = 32
+    arr = palette_tile(size, 707, ["#8a7a62", "#9a8a70", "#a8987c"], cells=(2, 8))
+    for x in range(0, size, 6):
+        arr[:, x] = hexc("#7a6a54")
+    return Image.fromarray(arr, "RGB")
+
+
 def preview(img: Image.Image, scale: int, path: str):
     img.resize((img.width * scale, img.height * scale), Image.NEAREST).save(path)
 
@@ -761,7 +840,8 @@ def main():
     bush().save(os.path.join(SPR, "bush.png"))
     for name, fn in (("grass", tex_grass), ("dirt", tex_dirt), ("plaster", tex_plaster),
                      ("wood", tex_wood), ("roof", tex_roof), ("stone", tex_stone),
-                     ("shoji", tex_shoji), ("water", tex_water)):
+                     ("shoji", tex_shoji), ("water", tex_water), ("banner", tex_banner),
+                     ("canvas", tex_canvas)):
         fn().save(os.path.join(TEX, f"{name}.png"))
     print("art generated:", sorted(os.listdir(SPR)), sorted(os.listdir(TEX)))
 

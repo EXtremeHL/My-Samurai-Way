@@ -25,6 +25,7 @@ func build() -> void:
 	_stone_lantern(Vector3(-4.4, 0, -2.4))
 	_stone_lantern(Vector3(-1.6, 0, -2.4))
 	_well(Vector3(5.2, 0, 3.4))
+	_camp()
 	_props()
 	_foliage()
 	_bounds()
@@ -318,6 +319,64 @@ func _well(pos: Vector3) -> void:
 	for side in [-1.0, 1.0]:
 		box(pos + Vector3(0, 2.12, side * 0.32), Vector3(1.5, 0.06, 0.75), Mat.tex("roof"), Vector3(side * 28, 0, 0))
 	box(pos + Vector3(0.2, 1.3, 0), Vector3(0.22, 0.25, 0.22), wood)
+
+
+## The Corvo camp on the far bank: tents, a war banner and a campfire.
+func _camp() -> void:
+	var canvas := Mat.tex("canvas")
+	var dark := Mat.col(Color(0.2, 0.15, 0.12))
+	for t in [[Vector3(19.0, 0, -3.7), 0.0, 2.6], [Vector3(20.6, 0, -1.9), 90.0, 2.2]]:
+		var root := Node3D.new()
+		root.position = t[0]
+		root.rotation_degrees.y = t[1]
+		add_child(root)
+		var m := MeshInstance3D.new()
+		var pr := PrismMesh.new()
+		pr.size = Vector3(t[2], 1.7, 2.6)
+		m.mesh = pr
+		m.material_override = canvas
+		m.position.y = 0.85
+		root.add_child(m)
+		box(Vector3(0, 0.6, 1.31), Vector3(0.7, 1.2, 0.02), Mat.col(Color(0.08, 0.06, 0.06)), Vector3.ZERO, root)
+		box(Vector3(0, 1.72, 0), Vector3(0.08, 0.08, 2.8), dark, Vector3.ZERO, root)
+		solid(Vector3.ZERO, Vector2(t[2], 2.6), root)
+	# war banner on a tall pole
+	var pole := Vector3(15.7, 0, -2.6)
+	cyl(pole + Vector3(0, 1.9, 0), 0.05, 0.06, 3.8, dark, 6)
+	box(pole + Vector3(0.45, 3.55, 0), Vector3(0.9, 0.06, 0.06), dark)
+	var flag := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.85, 1.7)
+	flag.mesh = q
+	var fm := Mat.tex("banner").duplicate() as StandardMaterial3D
+	fm.uv1_triplanar = false
+	fm.uv1_scale = Vector3.ONE
+	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	flag.material_override = fm
+	flag.position = pole + Vector3(0.48, 2.67, 0.02)
+	add_child(flag)
+	solid(pole, Vector2(0.3, 0.3))
+	# campfire: stone ring, logs, flame, warm light
+	var fire := Vector3(17.6, 0, 3.0)
+	var stone := Mat.tex("stone")
+	for k in 8:
+		var a := TAU * k / 8.0
+		box(fire + Vector3(cos(a) * 0.55, 0.1, sin(a) * 0.55), Vector3(0.25, 0.2, 0.22), stone, Vector3(0, -rad_to_deg(a), 0))
+	for k in 3:
+		box(fire + Vector3(0, 0.12, 0), Vector3(0.9, 0.1, 0.1), Mat.tex("wood"), Vector3(0, k * 60.0, 0))
+	var flame := cyl(fire + Vector3(0, 0.38, 0), 0.0, 0.26, 0.6, Mat.glow(Color(1.0, 0.55, 0.15), 3.0), 6)
+	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var fl := OmniLight3D.new()
+	fl.position = fire + Vector3(0, 0.8, 0)
+	fl.light_color = Color(1.0, 0.6, 0.3)
+	fl.omni_range = 6.0
+	add_child(fl)
+	lantern_lights.append(fl)
+	solid(fire, Vector2(1.2, 1.2))
+	# crates and a weapon rack
+	for p in [Vector3(20.2, 0, 1.9), Vector3(20.5, 0.5, 2.0)]:
+		box(p + Vector3(0, 0.25, 0), Vector3(0.5, 0.5, 0.5), Mat.tex("wood"))
+	solid(Vector3(20.3, 0, 1.95), Vector2(0.6, 0.6))
 
 
 func _props() -> void:

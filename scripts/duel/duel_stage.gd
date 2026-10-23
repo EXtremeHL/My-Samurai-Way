@@ -46,16 +46,17 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 # enter / exit
 # ---------------------------------------------------------------------------
-func start(id: String, npc: Actor, spot: Vector3) -> void:
+func start(id: String, npc: Actor, spot: Vector3, hero_fighter: Fighter = null, blade := "Lâmina partida") -> void:
 	foe_id = id
 	foe = npc
 	hero = main.player
 	active = true
 	busy = true
 	var data: Dictionary = Foes.ALL[id]
-	duel = Duel.new(Foes.make_hero(), Foes.make_foe(id), seed_value)
+	duel = Duel.new(hero_fighter if hero_fighter else Foes.make_hero(), Foes.make_foe(id), seed_value)
 	center = spot
 	ui = DuelUI.new()
+	ui.blade_name = blade
 	add_child(ui)
 	ui.picked.connect(_on_picked)
 	ui.refresh(duel)
@@ -94,7 +95,8 @@ func _finish() -> void:
 		Duel.Result.LOSE:
 			ui.show_banner("DERROTA", Color(1.0, 0.45, 0.4), 1.4)
 			await _wait(1.0)
-			await _say("foe", duel.foe.name, data.lose, 2.4)
+			if data.lose != "":
+				await _say("foe", duel.foe.name, data.lose, 2.4)
 	create_tween().tween_property(ui.root, "modulate:a", 0.0, 0.3)
 	var cam: Camera3D = main.cam
 	var back := Transform3D(_cam_from.basis, main._focus_point() + main.CAM_OFFSET)

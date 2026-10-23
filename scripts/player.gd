@@ -38,6 +38,8 @@ func _update_focus() -> void:
 	var best_d := TALK_RANGE
 	if not frozen:
 		for n in npcs:
+			if not n.visible:
+				continue
 			var d := Vector2(n.position.x - position.x, n.position.z - position.z).length()
 			if d < best_d:
 				best_d = d

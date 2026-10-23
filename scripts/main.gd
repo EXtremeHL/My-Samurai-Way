@@ -1,10 +1,11 @@
 extends Node3D
-## Entry scene: builds the valley, the player, NPCs, camera, HUD.
+## Entry scene: builds the valley and runs the story - the clock, who is
+## where, conversations, duels and endings.
 ##
 ## Command-line hooks (after a bare `--`):
-##   --look <dourado|neblina|noite>   lighting preset
+##   --look <dourado|neblina|noite>   lighting preset (otherwise follows the clock)
 ##   --capture <dir>                  render every lighting preset to PNGs, quit
-##   --shots <dir>                    render gameplay screenshots (walk/talk), quit
+##   --shots <dir>                    render gameplay screenshots, quit
 ##   --playthrough                    run the integration test runner, quit
 
 const CAM_OFFSET := Vector3(0.0, 8.4, 18.7)     # camera position relative to focus
@@ -17,15 +18,20 @@ var sun: DirectionalLight3D
 var cam: Camera3D
 var player: Player
 var dialogue: DialogueBox
+var stage: DuelStage
+var hud: StoryHUD
+var ending_screen: EndingScreen
+var state := GameState.new()
 var npcs := {}
 var talking_to: Npc = null
-var _title: Label
-var hint: Label
-var stage: DuelStage
-var anim_speed := 1.0           # tests shrink this to fast-forward duels
+var current_entry: Dictionary = {}
+var anim_speed := 1.0           # tests shrink this to fast-forward
 var duel_seed := -1             # fixed by tests; -1 = random
 var last_duel_result := -1
-var _pending_duel := ""
+var ended_with := ""
+var _pending: Array = []        # story commands collected during a conversation
+var _title: Label
+var hint: Label
 var _fade: ColorRect
 
 
@@ -41,15 +47,15 @@ func _ready() -> void:
 	we.environment = env
 	add_child(we)
 
-	for id in NpcData.TOWN:
+	for id in Story.ids():
 		var n := Npc.new()
 		village.add_child(n)
-		n.setup(id, NpcData.TOWN[id])
+		n.setup(id, Story.char_data(id))
 		npcs[id] = n
 
 	player = Player.new()
 	player.name = "Player"
-	player.position = NpcData.PLAYER_START
+	player.position = StoryData.PLAYER_START
 	village.add_child(player)
 	for n in npcs.values():
 		player.npcs.append(n)
@@ -64,6 +70,8 @@ func _ready() -> void:
 	cam.current = true
 
 	_build_overlay()
+	hud = StoryHUD.new()
+	add_child(hud)
 	dialogue = DialogueBox.new()
 	add_child(dialogue)
 	dialogue.finished.connect(_on_dialogue_finished)
@@ -73,11 +81,13 @@ func _ready() -> void:
 	stage.finished.connect(_on_duel_finished)
 
 	var args := OS.get_cmdline_user_args()
-	var look := "dourado"
+	if args.has("--playthrough") or args.has("--shots"):
+		Endings.save_path = "user://finais_teste.cfg"
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Endings.save_path))
+	refresh_world()
 	var i := args.find("--look")
 	if i >= 0 and i + 1 < args.size():
-		look = args[i + 1]
-	Look.apply(look, env, sun, village)
+		Look.apply(args[i + 1], env, sun, village)
 
 	i = args.find("--capture")
 	if i >= 0 and i + 1 < args.size():
@@ -88,11 +98,31 @@ func _ready() -> void:
 		_shots(args[i + 1])
 		return
 	if args.has("--playthrough"):
-		var runner: Node = load("res://tests/playthrough_runner.gd").new()
+		var script: GDScript = load("res://tests/playthrough_runner.gd")
+		if script == null or not script.can_instantiate():
+			print("RESULT: FAIL (playthrough runner failed to compile)")
+			get_tree().quit(1)
+			return
+		var runner: Node = script.new()
 		add_child(runner)
 		runner.run(self)
 		return
-	_show_title("Kurogane-juku", "Vale de Kurogane")
+	_show_title("My Samurai Way", "Kurogane-juku · %s" % state.clock_text())
+
+
+# ---------------------------------------------------------------------------
+# world <- state
+# ---------------------------------------------------------------------------
+## Lighting, who stands where, names and HUD, all derived from the state.
+func refresh_world() -> void:
+	Look.apply(state.look(), env, sun, village)
+	for id in npcs:
+		var n: Npc = npcs[id]
+		if stage.active and (n == stage.foe):
+			continue
+		n.place(Story.present(id, state))
+		n.display_name = Story.display_name(id, state)
+	hud.refresh(state)
 
 
 func _focus_point() -> Vector3:
@@ -103,13 +133,24 @@ func _focus_point() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	hud.set_explore_visible(not stage.active and ended_with == "")
 	if stage.active:
 		hint.text = ""
 		return
 	var target := _focus_point() + CAM_OFFSET
 	cam.position = cam.position.lerp(target, 1.0 - exp(-CAM_FOLLOW * delta))
 	var f: Npc = player.focus
-	hint.text = "[E]  Falar com %s" % f.display_name if f and not dialogue.open else ""
+	if f and not dialogue.open and not player.frozen:
+		hint.text = "[E]  %s %s" % ["Ver" if f.is_spot() else "Falar com", f.display_name]
+	else:
+		hint.text = ""
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("journal") and not dialogue.open and not stage.active and ended_with == "":
+		get_viewport().set_input_as_handled()
+		hud.toggle_journal(state)
+		player.frozen = hud.journal_open
 
 
 ## Jump the camera to the player without easing (teleports, tests, shots).
@@ -117,30 +158,110 @@ func snap_camera() -> void:
 	cam.position = _focus_point() + CAM_OFFSET
 
 
+# ---------------------------------------------------------------------------
+# conversations
+# ---------------------------------------------------------------------------
 func _on_interact(n: Npc) -> void:
+	var e := Story.pick(n.npc_id, state)
+	if e.is_empty():
+		return
+	open_entry(e, n)
+
+
+func open_entry(e: Dictionary, n: Npc) -> void:
 	talking_to = n
+	current_entry = e
+	state.set_flag("seen_" + e.id)
 	player.frozen = true
-	n.turn_to(player.position)
-	player.face_dir(n.position - player.position)
+	if n:
+		n.turn_to(player.position)
+		if not n.is_spot():
+			player.face_dir(n.position - player.position)
 	player.animate(false, 0.0)
-	dialogue.start(n.lines())
-
-
-func _on_dialogue_finished() -> void:
-	if talking_to:
-		talking_to.times_talked += 1
-		talking_to.return_home()
-	talking_to = null
-	player.frozen = false
-	if _pending_duel != "":
-		var id := _pending_duel
-		_pending_duel = ""
-		start_duel(id)
+	dialogue.start(e.lines)
 
 
 func _on_choice(tag: String) -> void:
-	if tag.begins_with("duel:"):
-		_pending_duel = tag.substr(5)
+	_pending.append_array(state.apply(tag))
+
+
+func _on_dialogue_finished() -> void:
+	if current_entry.is_empty():
+		return                          # a system dialogue; its caller handles it
+	var e := current_entry
+	current_entry = {}
+	_pending.append_array(state.apply(e.get("after", "")))
+	if talking_to:
+		talking_to.return_home()
+	await run_commands(e.get("cost", GameState.COST_TALK))
+
+
+## Carries out what the last conversation set in motion, then charges time.
+func run_commands(cost: int) -> void:
+	var cmds := _pending
+	_pending = []
+	var duel_id := ""
+	var chain := ""
+	var rest := false
+	for c in cmds:
+		match c[0]:
+			"end":
+				await _end(c[1])
+				return
+			"duel":
+				duel_id = c[1]
+			"chain":
+				chain = c[1]
+			"rest":
+				rest = true
+			"time":
+				cost += int(c[1])
+	if chain != "":
+		open_entry(Story.entry(chain), talking_to)
+		return
+	if duel_id != "":
+		state.spend(cost)
+		talking_to = null
+		start_duel(duel_id)
+		return
+	talking_to = null
+	if rest:
+		state.heal(1.0)
+		await advance_time(true)
+		return
+	await spend_time(cost)
+
+
+func spend_time(cost: int) -> void:
+	var over := state.spend(cost)
+	refresh_world()
+	if over:
+		await advance_time(false)
+	else:
+		player.frozen = false
+
+
+## Next part of the day: fade, title card, new light, people move.
+func advance_time(rested: bool) -> void:
+	player.frozen = true
+	if not state.advance_period():
+		await _end("time")
+		return
+	if not rested:
+		state.heal(0.3)
+	await _fade_to(1.0, 0.6)
+	refresh_world()
+	snap_camera()
+	hud.show_card("Dia %d\n%s" % [state.day, state.period_name()], 0.9 * anim_speed)
+	await get_tree().create_timer(1.2 * anim_speed).timeout
+	await _fade_to(0.0, 0.8)
+	player.frozen = false
+
+
+func _fade_to(a: float, secs: float) -> void:
+	var t := create_tween()
+	t.tween_property(_fade, "color:a", a, secs * anim_speed)
+	await t.finished
 
 
 # ---------------------------------------------------------------------------
@@ -152,47 +273,96 @@ func start_duel(id: String) -> void:
 	player.set_physics_process(false)
 	npc.show_prompt(false)
 	stage.seed_value = duel_seed if duel_seed >= 0 else randi()
-	stage.start(id, npc, NpcData.TOWN[id].duel_spot)
+	stage.start(id, npc, StoryData.CHARS[id].duel_spot, state.make_hero(), state.blade_name())
 
 
 func _on_duel_finished(result: int, id: String) -> void:
 	last_duel_result = result
+	var f: Dictionary = Foes.ALL[id]
 	var npc: Npc = npcs[id]
-	if result == Duel.Result.WIN or result == Duel.Result.SURRENDER:
-		npc.state = "vencido"
-		var short_name: String = Foes.ALL[id].name.get_slice(",", 0)
-		npc.display_name = short_name
-		npc.home = NpcData.TOWN[id].get("beaten_pos", npc.home)
-	# the foe walks back to his post
-	var t := create_tween()
-	t.tween_property(npc, "position", npc.home, 0.6 * anim_speed)
-	await t.finished
-	npc.return_home()
-	if result == Duel.Result.LOSE:
-		await _wake_at_teahouse()
+	state.hero_hp = maxi(1, stage.duel.hero.hp)
+	var cmds: Array = []
+	match result:
+		Duel.Result.WIN:
+			cmds.append_array(state.apply(f.on_win))
+			player.frozen = true
+			var short_name: String = f.name.get_slice(",", 0)
+			dialogue.start([
+				["", "%s está de joelhos, à tua mercê." % short_name],
+				{"choice": ["Poupá-lo", "Acabar com ele"], "tags": [f.on_spare, f.on_kill]},
+			])
+			await dialogue.finished
+			cmds.append_array(_pending)
+			_pending = []
+		Duel.Result.SURRENDER:
+			cmds.append_array(state.apply(f.on_win))
+			cmds.append_array(state.apply(f.on_spare))
+		Duel.Result.LOSE:
+			cmds.append_array(state.apply(f.on_lose))
+	for c in cmds:
+		if c[0] == "end":
+			await _end(c[1])
+			return
+	var ev := Endings.on_event(state)
+	if ev != "":
+		await _end(ev)
+		return
+	if Story.present(id, state) == null:
+		# killed, or fled the valley: gone
+		var t := create_tween()
+		t.tween_property(npc, "scale", Vector3(1, 0.01, 1), 0.4 * anim_speed)
+		await t.finished
+		npc.scale = Vector3.ONE
+	else:
+		var t := create_tween()
+		t.tween_property(npc, "position", npc.home, 0.6 * anim_speed)
+		await t.finished
 	player.snap_to_ground()
 	player.set_physics_process(true)
-	player.frozen = false
+	if result == Duel.Result.LOSE:
+		await _wake_at_teahouse()
+		return
+	await spend_time(GameState.COST_DUEL)
 
 
 func _wake_at_teahouse() -> void:
-	var t := create_tween()
-	t.tween_property(_fade, "color:a", 1.0, 0.6 * anim_speed)
-	await t.finished
-	player.position = NpcData.WAKE_POS
+	player.frozen = true
+	await _fade_to(1.0, 0.6)
+	player.position = StoryData.WAKE_POS
 	player.face_dir(Vector3.FORWARD)
+	state.hero_hp = roundi(state.hero_max_hp() * 0.5)
+	var more := state.advance_period()      # out cold for hours
+	if not more:
+		await _end("time")
+		return
+	refresh_world()
 	snap_camera()
 	await get_tree().create_timer(0.5 * anim_speed).timeout
-	var t2 := create_tween()
-	t2.tween_property(_fade, "color:a", 0.0, 0.8 * anim_speed)
-	await t2.finished
-	player.frozen = true
-	dialogue.start(NpcData.WAKE_LINES)
+	await _fade_to(0.0, 0.8)
+	dialogue.start(StoryData.WAKE_LINES)
 	await dialogue.finished
+	player.frozen = false
 
 
 # ---------------------------------------------------------------------------
-# overlay: vignette + location title card
+# endings
+# ---------------------------------------------------------------------------
+func _end(id: String) -> void:
+	if id == "leave" or id == "time":
+		id = Endings.evaluate(state, id)
+	ended_with = id
+	state.ending = id
+	player.frozen = true
+	player.set_physics_process(false)
+	hint.text = ""
+	ending_screen = EndingScreen.new()
+	add_child(ending_screen)
+	ending_screen.restart.connect(func(): get_tree().reload_current_scene())
+	await ending_screen.show_ending(id, state, anim_speed)
+
+
+# ---------------------------------------------------------------------------
+# overlay: vignette, title, hint, fade
 # ---------------------------------------------------------------------------
 func _build_overlay() -> void:
 	var layer := CanvasLayer.new()
@@ -267,69 +437,76 @@ func _capture(dir: String) -> void:
 	get_tree().quit(0)
 
 
+func _goto(day: int, period: String) -> void:
+	while not (state.day == day and state.period() == period):
+		state.advance_period()
+	refresh_world()
+
+
 func _shots(dir: String) -> void:
-	# 1. walking toward the tea house, captured mid-stride
-	player.position = Vector3(-2.4, 0, 0.1)
-	snap_camera()
-	Input.action_press("move_left")
-	await _wait(26)
-	Input.action_release("move_left")
-	player.set_physics_process(false)
-	player.face_dir(Vector3.LEFT)
-	player.walk_frame = 1
-	player._apply_frame()
-	await _wait(30)
-	_save_shot(dir, "shot_walk.png")
-	player.set_physics_process(true)
-	# 2. next to Oyuki: the talk prompt, then the dialogue box
+	# 1. day 1 afternoon: HUD + a conversation
 	player.position = Vector3(-7.3, 0, -0.75)
 	player.face_dir(Vector3.FORWARD)
 	snap_camera()
 	await _wait(20)
-	_save_shot(dir, "shot_prompt.png")
+	_save_shot(dir, "shot_hud.png")
 	_on_interact(npcs["oyuki"])
 	await _wait(150)
 	_save_shot(dir, "shot_dialogue.png")
-	for _k in 6:
-		dialogue.advance()
-	await _wait(120)
-	_save_shot(dir, "shot_dialogue_hero.png")
-	# 3. on the bridge at night
 	while dialogue.open:
 		dialogue.advance()
-	Look.apply("noite", env, sun, village)
-	player.position = Vector3(12.5, 0, 0.2)
-	player.snap_to_ground()
-	player.face_dir(Vector3.RIGHT)
+	await _wait(5)
+	hud.toggle_journal(state)
+	state.set_flag("conhece_tetsu")
+	state.set_flag("quer_aco")
+	state.add_rep("vila", 15)
+	state.add_rep("corvo", -10)
+	hud.refresh(state)
+	await _wait(10)
+	_save_shot(dir, "shot_journal.png")
+	hud.toggle_journal(state)
+	# 2. night: the Corvo thug harassing Oyuki
+	_goto(1, "noite")
+	player.position = Vector3(-6.4, 0, 0.4)
+	player.face_dir(Vector3.FORWARD)
 	snap_camera()
 	await _wait(40)
-	_save_shot(dir, "shot_bridge_night.png")
-	# 4. a duel with Tetsu on the main street
-	Look.apply("dourado", env, sun, village)
-	duel_seed = 7
-	player.position = Vector3(-4.9, 0, -0.6)
+	_save_shot(dir, "shot_night_bandit.png")
+	_on_interact(npcs["bandido"])
+	while not dialogue.choosing:
+		dialogue.advance()
+		await _wait(2)
+	await _wait(10)
+	_save_shot(dir, "shot_night_choice.png")
+	dialogue.choose(2)
+	await _wait(10)
+	# 3. day 2 morning: Kuroda's camp across the bridge
+	_goto(2, "manha")
+	player.position = Vector3(17.6, 0, 0.6)
+	player.face_dir(Vector3.FORWARD)
 	snap_camera()
-	await _wait(5)
-	start_duel("tetsu")
+	await _wait(40)
+	_save_shot(dir, "shot_camp.png")
+	# 4. day 2 afternoon: Akamatsu at the inn
+	_goto(2, "tarde")
+	player.position = Vector3(3.0, 0, -1.2)
+	player.face_dir(Vector3.FORWARD)
+	snap_camera()
+	await _wait(40)
+	_save_shot(dir, "shot_akamatsu.png")
+	# 5. a duel against Kuroda
+	duel_seed = 7
+	start_duel("kuroda")
 	await stage.awaiting_input
 	await _wait(20)
-	_save_shot(dir, "shot_duel_menu.png")
+	_save_shot(dir, "shot_duel_kuroda.png")
 	stage._on_picked("boca_menu", 0)
 	await _wait(10)
 	_save_shot(dir, "shot_duel_boca.png")
-	stage.pick_boca(Bocas.Cat.INSULTO)
-	await get_tree().create_timer(1.0).timeout
-	_save_shot(dir, "shot_duel_boca_line.png")
-	await get_tree().create_timer(1.9).timeout
-	_save_shot(dir, "shot_duel_boca_reply.png")
-	await stage.awaiting_input
-	await _wait(10)
-	_save_shot(dir, "shot_duel_after_boca.png")
-	stage.pick(Duel.Act.HEAVY)
-	await get_tree().create_timer(0.66).timeout
-	_save_shot(dir, "shot_duel_strike.png")
-	await stage.awaiting_input
-	stage._on_picked("boca_menu", 0)
-	await _wait(10)
-	_save_shot(dir, "shot_duel_boca_known.png")
+	# 6. an ending card
+	anim_speed = 0.1
+	state.set_flag("espada_forjada")
+	await _end("leave")
+	await _wait(20)
+	_save_shot(dir, "shot_ending.png")
 	get_tree().quit(0)

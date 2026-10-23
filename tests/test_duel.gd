@@ -271,3 +271,14 @@ func test_policies() -> void:
 		check(rt >= rr + 0.04, "%s: talking, even blind, beats silence (%.2f vs %.2f)" % [foe_id, rt, rr])
 		check(ri >= rr + 0.1, "%s: the right boca for his temperament wins more (%.2f vs %.2f)" % [foe_id, ri, rr])
 		check(rf <= rr - 0.25, "%s: the wrong boca loses duels (%.2f vs %.2f)" % [foe_id, rf, rr])
+	# the boss: the black-steel quest is what makes Kuroda beatable
+	var broken := func(sd: int) -> Duel: return Duel.new(GameState.new().make_hero(), Foes.make_foe("kuroda"), sd)
+	var forged := func(sd: int) -> Duel:
+		var gs := GameState.new()
+		gs.set_flag("espada_forjada")
+		return Duel.new(gs.make_hero(), Foes.make_foe("kuroda"), sd)
+	var kb := DuelPolicies.win_rate(broken, DuelPolicies.informed, 300)
+	var kf := DuelPolicies.win_rate(forged, DuelPolicies.informed, 300)
+	print("      kuroda (informed): broken blade %.2f | black steel %.2f" % [kb, kf])
+	check(kb <= 0.6, "Kuroda is a real boss with a broken blade (%.2f)" % kb)
+	check(kf >= kb + 0.2, "the reforged blade makes Kuroda beatable (%.2f vs %.2f)" % [kf, kb])

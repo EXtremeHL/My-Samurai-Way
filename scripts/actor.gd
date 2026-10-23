@@ -13,15 +13,21 @@ var walk_frame := 0          # 0 idle, 1..4 walking
 var _anim_t := 0.0
 
 
+var body_shape: CollisionShape3D
+
+
+## sheet_id "" makes an invisible, non-solid actor (a door, a path...).
 func setup_actor(sheet_id: String) -> void:
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
-	var cs := CollisionShape3D.new()
+	if sheet_id == "":
+		return
+	body_shape = CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.28
 	cap.height = 1.4
-	cs.shape = cap
-	cs.position.y = 0.75
-	add_child(cs)
+	body_shape.shape = cap
+	body_shape.position.y = 0.75
+	add_child(body_shape)
 	sprite = PixelSprite.make("res://assets/sprites/char_%s.png" % sheet_id, 32, 48)
 	add_child(sprite)
 	_apply_frame()

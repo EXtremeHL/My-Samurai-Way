@@ -1,4 +1,4 @@
-# O Caminho do Ronin
+# My Samurai Way
 
 RPG de samurai em **HD-2D**, inspirado em *Way of the Samurai*: um ronin chega a
 um vale dividido entre facções e, em poucos dias, as escolhas dele decidem quem
@@ -29,6 +29,37 @@ uv run --with pillow --with numpy python tools/gen_art.py
 - `assets/sprites/tree_*.png`, `bush.png`: folhagem sombreada por esferas.
 - `assets/textures/*.png`: tiles com 32 px por metro, aplicados em triplanar
   no mundo.
+
+## O vale e o tempo
+- **3 dias**, cada um com **manhã** (neblina), **tarde** (dourada) e **noite**.
+- Cada conversa gasta tempo (●●●●●●●● no canto do ecrã). Um duelo gasta mais. Na **estalagem** descansas e passas à parte seguinte do dia.
+- As pessoas mudam conforme a hora. À noite o guarda do santuário dorme e um bandido do Corvo aparece na casa de chá. No dia 2 chegam o Magistrado Akamatsu e o chefe Kuroda.
+- Há três **facções** (Corvo, Magistrado e Vila), cada uma com a sua **reputação**.
+- **[Tab] Diário**: mostra a reputação, os acontecimentos e os finais descobertos.
+- Depois de vencer um duelo escolhes **poupar ou matar** o adversário. Os mortos não voltam.
+- Se perderes, acordas horas depois na casa de chá, com as feridas.
+
+### Finais (10)
+| Final | Como |
+|---|---|
+| O Protetor de Kurogane | derrotar Kuroda **e** Akamatsu com a vila do teu lado |
+| O Corvo Voa Alto | juntar-te ao Corvo e derrubar o Magistrado |
+| A Espada do Magistrado | aceitar o contrato do Magistrado e derrotar Kuroda |
+| A Lâmina Renascida | trazer aço negro ao Genzō, forjar a espada e partir |
+| O Desertor | aceitar um trabalho e fugir pela estrada |
+| Só de Passagem | partir sem mudar nada |
+| O Ronin Maldito | a vila odeia-te (reputação ≤ −40) |
+| Kurogane em Chamas | tomar um lado e deixar o tempo acabar |
+| Mais Um Dia em Kurogane | o terceiro dia acaba sem nada resolvido |
+| O Último Corte | perder contra Kuroda |
+
+Os finais descobertos ficam guardados entre jogos (`user://finais.cfg`).
+
+### Acrescentar conteúdo
+A história é **orientada a dados** e está em `scripts/story/story_data.gd`. Cada personagem tem horários,
+condições de presença e conversas. Cada conversa tem condições (`when`) e efeitos (`after` e tags nas
+escolhas). Os finais são regras em `scripts/story/endings.gd`. O `tests/test_story.gd` valida tudo:
+tags, flags lidas mas nunca ativadas, NPCs presentes sem nada para dizer, e uma rota até cada final.
 
 ## Duelos
 Os duelos são **por turnos** e decorrem na própria rua, onde estás. Em cada turno o adversário
@@ -73,6 +104,7 @@ Balanceamento medido com jogadores simulados (`tests/test_duel.gd`, 400 duelos c
 | Shift (manter) | correr |
 | E / Espaço / Enter | falar · avançar diálogo |
 | Esc | avançar / fechar diálogo · voltar no menu de bocas |
+| Tab / J | diário |
 | Setas / W S + E | navegar nos menus e escolhas |
 
 ## Correr
@@ -87,7 +119,9 @@ GODOT=".../Godot_v4.7-stable_win64_console.exe"
 ## Testes
 ```bash
 "$GODOT" --headless --path . -s tests/smoke_project_config.gd   # config + input map
+"$GODOT" --headless --path . -s tests/test_story.gd              # história: dados, horários, rotas para os 10 finais
 "$GODOT" --headless --path . -s tests/test_duel.gd               # lógica do duelo + balanceamento
+"$GODOT" --headless --path . -s tests/foe_report.gd              # taxas de vitória por adversário e estilo
 "$GODOT" --headless --path . -s tests/balance_sweep.gd           # grelha de stats vs. estilos de jogo
 "$GODOT" --headless --path . -- --playthrough                    # integração (jogo real)
 ```
@@ -100,6 +134,8 @@ GODOT=".../Godot_v4.7-stable_win64_console.exe"
 - `scripts/dialogue_box.gd`: caixa de diálogo com efeito de máquina de escrever.
 - `scripts/duel/`: duelos. Contém `duel.gd` (lógica pura), `personality.gd` (tabela de reações),
   `bocas.gd`, `foes.gd`, `duel_stage.gd` (animação no mundo) e `duel_ui.gd` (interface).
+- `scripts/story/`: `game_state.gd` (relógio, reputação, flags), `story_data.gd` (o vale),
+  `story.gd` (quem está onde e o que diz), `endings.gd`, `story_hud.gd` e `ending_screen.gd`.
 - `scripts/look.gd`: presets de luz e pós-processamento.
 - `scripts/pixel_sprite.gd` + `shaders/sprite_lit.gdshader`: cartões de
   pixel-art iluminados que projetam sombra.

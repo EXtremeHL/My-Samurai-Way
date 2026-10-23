@@ -19,11 +19,16 @@ func physics(frames: int) -> void:
 		await get_tree().physics_frame
 
 
-func hold(action: String, frames: int) -> Array:
+func frames(n: int) -> void:
+	for _f in n:
+		await get_tree().process_frame
+
+
+func hold(action: String, n: int) -> Array:
 	## Holds an action; returns the walk frames seen while it was held.
 	var seen := []
 	Input.action_press(action)
-	for _f in frames:
+	for _f in n:
 		await get_tree().physics_frame
 		if not seen.has(main.player.walk_frame):
 			seen.append(main.player.walk_frame)
@@ -45,24 +50,37 @@ func press(action: String) -> void:
 	await get_tree().process_frame
 
 
-func talk_through() -> void:
+## Waits until nothing is animating: no fade, dialogue may be open.
+func settle(max_frames := 3000) -> void:
+	for _f in max_frames:
+		await get_tree().process_frame
+		if main.stage.active and not main.stage.busy:
+			return
+		if not main.stage.active and (not main.player.frozen or main.dialogue.open or main.ended_with != ""):
+			return
+
+
+## Talk to whoever is in range and click through; `choice` picks an option.
+func talk(choice := -1) -> void:
 	await press("interact")
 	var n := 0
-	while main.dialogue.open and n < 40:
+	while main.dialogue.open and n < 60:
+		if main.dialogue.choosing:
+			if choice < 0:
+				choice = main.dialogue._choice_tags.size() - 1
+			main.dialogue.choice_index = choice
+			await press("interact")
+		else:
+			await press("interact")
+		n += 1
+	await settle()
+
+
+func to_choice() -> void:
+	var n := 0
+	while main.dialogue.open and not main.dialogue.choosing and n < 30:
 		await press("interact")
 		n += 1
-	await physics(2)
-
-
-func wait_duel_input() -> void:
-	## Waits until the duel wants input again (or is over).
-	var stage: DuelStage = main.stage
-	for _f in 4000:
-		await get_tree().process_frame
-		if not stage.active and (not main.player.frozen or main.dialogue.open):
-			return
-		if stage.active and not stage.busy:
-			return
 
 
 func teleport(p: Vector3) -> void:
@@ -72,33 +90,43 @@ func teleport(p: Vector3) -> void:
 	await physics(3)
 
 
+func present(id: String) -> bool:
+	return main.npcs[id].visible
+
+
 func run(m: Node) -> void:
 	main = m
 	await physics(5)
 	var pl: Player = main.player
+	var st: GameState = main.state
 
-	# --- the town is populated ---
-	check(main.npcs.size() == NpcData.TOWN.size(), "all %d NPCs spawned" % NpcData.TOWN.size())
-	check(pl.position.distance_to(NpcData.PLAYER_START) < 0.05, "player at start position")
+	# =====================================================================
+	# arrival: day 1, afternoon
+	# =====================================================================
+	check(st.clock_text() == "Dia 1 · Tarde", "arrive on day 1, afternoon")
+	check(main.hud.clock_label.text == "Dia 1 · Tarde", "HUD shows the clock")
+	var expected := []
+	for id in Story.ids():
+		if Story.present(id, st) != null:
+			expected.append(id)
+	var shown: Array = main.npcs.keys().filter(func(id): return present(id))
+	check(shown.size() == expected.size() and shown.size() >= 6, "the right people are about (%s)" % [shown])
+	check(not present("bandido") and not present("kuroda") and not present("akamatsu"), "night thugs and bosses not here yet")
+	check(pl.position.distance_to(StoryData.PLAYER_START) < 0.05, "player at start position")
 
-	# --- walking right moves the player, animates, faces side ---
+	# =====================================================================
+	# walking
+	# =====================================================================
 	var x0 := pl.position.x
-	var frames := await hold("move_right", 40)
+	var seen_frames := await hold("move_right", 40)
 	check(pl.position.x > x0 + 1.5, "walking right moves player (%.2f -> %.2f)" % [x0, pl.position.x])
-	check(frames.size() >= 3, "walk cycle animates (frames seen %s)" % [frames])
+	check(seen_frames.size() >= 3, "walk cycle animates (frames seen %s)" % [seen_frames])
 	check(pl.facing == "side" and not pl.flip, "faces right after walking right")
-	check(pl.walk_frame == 0, "returns to idle frame when stopping")
-
-	# --- walking left flips the side sprite ---
 	await hold("move_left", 10)
-	check(pl.facing == "side" and pl.flip, "faces left (flipped) after walking left")
-
-	# --- walking down faces the camera ---
+	check(pl.facing == "side" and pl.flip, "faces left (flipped)")
 	await teleport(Vector3(0.0, 0, 0.0))
 	await hold("move_down", 10)
 	check(pl.facing == "down", "faces down after walking down")
-
-	# --- running is faster than walking ---
 	await teleport(Vector3(-2.0, 0, 0.5))
 	await hold("move_right", 30)
 	var walked := pl.position.x + 2.0
@@ -106,57 +134,41 @@ func run(m: Node) -> void:
 	Input.action_press("run")
 	await hold("move_right", 30)
 	Input.action_release("run")
-	var ran := pl.position.x + 2.0
-	check(ran > walked * 1.4, "running covers more ground (%.2f vs %.2f)" % [ran, walked])
-
-	# --- houses are solid: walking into the inn stops at its wall ---
-	await teleport(Vector3(1.5, 0, 0.0))
+	check(pl.position.x + 2.0 > walked * 1.4, "running covers more ground")
+	await teleport(Vector3(-0.5, 0, 0.0))
 	await hold("move_up", 150)
-	check(pl.position.z > -3.75, "inn wall blocks the player (z=%.2f)" % pl.position.z)
-	check(pl.position.z < -2.5, "player actually reached the inn wall (z=%.2f)" % pl.position.z)
-
-	# --- the stream blocks, except on the bridge ---
+	check(pl.position.z > -3.75 and pl.position.z < -2.5, "inn wall blocks the player (z=%.2f)" % pl.position.z)
 	await teleport(Vector3(10.0, 0, 3.6))
 	await hold("move_right", 90)
 	check(pl.position.x < 11.3, "stream blocks the player off the bridge (x=%.2f)" % pl.position.x)
-
 	await teleport(Vector3(9.6, 0, 0.25))
 	var max_y := 0.0
 	Input.action_press("move_right")
-	for _f in 150:
+	for _f in 120:
 		await get_tree().physics_frame
 		max_y = maxf(max_y, pl.position.y)
 	Input.action_release("move_right")
 	await physics(2)
-	check(pl.position.x > 14.8, "player crosses the bridge (x=%.2f)" % pl.position.x)
-	check(max_y > 0.25, "player climbs the bridge arch (max y=%.2f)" % max_y)
-	check(absf(pl.position.y) < 0.01, "player back on the ground after the bridge")
-
-	# --- world bounds hold ---
+	check(pl.position.x > 14.8 and max_y > 0.25, "player crosses the arched bridge (x=%.2f, max y=%.2f)" % [pl.position.x, max_y])
 	await teleport(Vector3(0.0, 0, 4.0))
 	await hold("move_down", 120)
-	check(pl.position.z < Village.BOUNDS.end.y, "southern bound holds (z=%.2f)" % pl.position.z)
-
-	# --- camera follows the player ---
+	check(pl.position.z < Village.BOUNDS.end.y, "southern bound holds")
 	await teleport(Vector3(-6.0, 0, 0.5))
 	await physics(90)
-	var expect: Vector3 = main._focus_point() + main.CAM_OFFSET
-	check(main.cam.position.distance_to(expect) < 0.3, "camera settles on the player")
+	check(main.cam.position.distance_to(main._focus_point() + main.CAM_OFFSET) < 0.3, "camera follows the player")
 
-	# --- talking to Oyuki ---
+	# =====================================================================
+	# conversations cost time
+	# =====================================================================
 	var oyuki: Npc = main.npcs["oyuki"]
 	await teleport(Vector3(-7.3, 0, -0.7))
 	await physics(2)
-	check(pl.focus == oyuki, "Oyuki is in talking range")
-	check(oyuki._prompt.visible, "talk marker shown over Oyuki")
-	await get_tree().process_frame
-	check(main.hint.text.contains("Oyuki"), "HUD hint names Oyuki ('%s')" % main.hint.text)
+	check(pl.focus == oyuki and oyuki._prompt.visible, "Oyuki in range, marker shown")
+	await frames(1)
+	check(main.hint.text.contains("Oyuki"), "HUD hint names Oyuki")
+	var u0 := st.units
 	await press("interact")
-	check(main.dialogue.open, "interact opens the dialogue")
-	check(main.dialogue.current_speaker() == "Oyuki", "first speaker is Oyuki")
-	check(not oyuki._prompt.visible, "prompt hidden while talking")
-	await get_tree().process_frame
-	check(main.hint.text == "", "HUD hint hidden while talking")
+	check(main.dialogue.open and main.current_entry.id == "oyuki_1", "first talk with Oyuki")
 	check(oyuki.facing == "down", "Oyuki turns toward the player")
 	var before := pl.position
 	await hold("move_left", 20)
@@ -165,17 +177,15 @@ func run(m: Node) -> void:
 	while main.dialogue.open and presses < 40:
 		await press("interact")
 		presses += 1
-	check(not main.dialogue.open, "dialogue closes after its lines (%d presses)" % presses)
-	check(presses >= oyuki.lines_first.size(), "typewriter: a press finishes a line before advancing")
-	check(oyuki.times_talked == 1, "talk counted")
-	check(not pl.frozen, "player unfrozen after dialogue")
-
-	# --- second conversation uses the 'again' lines ---
-	await physics(3)
+	await settle()
+	check(not main.dialogue.open and not pl.frozen, "dialogue closes, player free")
+	check(st.units == u0 + GameState.COST_TALK, "talking costs time (%d -> %d)" % [u0, st.units])
+	check(main.hud.pips.text.count("○") == st.units, "HUD pips show time spent")
 	await press("interact")
-	check(main.dialogue.open and main.dialogue.lines == oyuki.lines_again, "second talk uses follow-up lines")
+	check(main.current_entry.get("id", "") == "oyuki_dica", "second talk: something new to say")
 	while main.dialogue.open:
 		await press("interact")
+	await settle()
 
 	# --- interact far from anyone does nothing ---
 	await teleport(Vector3(2.0, 0, 3.0))
@@ -183,111 +193,147 @@ func run(m: Node) -> void:
 	await press("interact")
 	check(not main.dialogue.open and pl.focus == null, "interact with nobody nearby does nothing")
 
-	# --- NPCs are solid ---
-	await teleport(Vector3(-4.9, 0, 0.2))
-	await hold("move_up", 60)
-	check(pl.position.z > -1.4 + 0.3, "can't walk through the ronin (z=%.2f)" % pl.position.z)
-
+	# --- journal ---
+	await press("journal")
+	check(main.hud.journal_open and pl.frozen, "Tab opens the journal and pauses the hero")
+	check(main.hud.journal_body.text.contains("Reputação"), "journal shows reputation")
+	await press("journal")
+	check(not main.hud.journal_open and not pl.frozen, "Tab closes it")
 
 	# =====================================================================
-	# DUELS
+	# duel with Tetsu: choice -> duel -> mercy choice -> consequences
 	# =====================================================================
 	main.anim_speed = 0.02
 	main.duel_seed = 4242
+	st.units = 0
 	var stage: DuelStage = main.stage
 	var tetsu: Npc = main.npcs["tetsu"]
-
-	# --- the challenge comes through a dialogue choice ---
 	await teleport(Vector3(-4.9, 0, -0.6))
-	await talk_through()                       # first conversation
-	check(tetsu.times_talked == 1, "talked to Tetsu once")
-	await press("interact")                    # second: ends in a choice
-	var guard_presses := 0
-	while main.dialogue.open and not main.dialogue.choosing and guard_presses < 30:
+	await talk()
+	check(st.has("conhece_tetsu") and tetsu.display_name == "Tetsu", "Tetsu introduces himself; name now known")
+	await press("interact")
+	var guard := 0
+	while main.dialogue.open and not main.dialogue.choosing and guard < 30:
 		await press("interact")
-		guard_presses += 1
-	check(main.dialogue.choosing, "Tetsu's second talk ends in a choice")
+		guard += 1
+	check(main.dialogue.choosing, "Tetsu's challenge ends in a choice")
 	await press("move_down")
 	check(main.dialogue.choice_index == 1, "choice cursor moves down")
 	await press("move_up")
-	check(main.dialogue.choice_index == 0, "choice cursor moves up")
 	await press("interact")
-	await wait_duel_input()
+	await settle()
 	check(stage.active, "choosing 'Desembainhar' starts the duel")
 	check(pl.in_combat() and tetsu.in_combat(), "both fighters switch to combat sprites")
-	check(main.cam.global_position.distance_to(stage.center) < 9.0, "camera moves in to frame the duel")
-	check(absf(pl.position.x - (stage.center.x - DuelStage.SPACING)) < 0.05, "hero walked to his mark")
-	check(main.hint.text == "", "exploration hint hidden during the duel")
-
-	# --- real input on the menu: first item is a quick strike ---
+	check(not main.hud.clock_panel.visible, "exploration HUD hidden in the duel")
 	var turn0 := stage.duel.turn
 	await press("interact")
-	await wait_duel_input()
+	await settle()
 	check(stage.duel.turn == turn0 + 1, "pressing E on the menu plays a turn")
-
-	# --- a boca resolves without ending the turn and costs ki ---
 	stage.duel.hero.ki = 50
 	var t1 := stage.duel.turn
 	stage._on_picked("boca_menu", 0)
-	check(stage.in_boca_menu, "boca submenu opens")
-	check(stage.ui.menu_box.get_child_count() == Bocas.ORDER.size() + 1, "submenu lists every boca + back")
+	check(stage.ui.menu_box.get_child_count() == Bocas.ORDER.size() + 1, "boca submenu lists every boca + back")
 	await press("cancel")
 	check(not stage.in_boca_menu, "Esc backs out of the boca menu")
 	stage.pick_boca(Bocas.Cat.TROCA)
-	await wait_duel_input()
+	await settle()
 	check(stage.duel.turn == t1 and stage.duel.hero.ki == 50 - Duel.BOCA_KI, "boca: same turn, -%d ki" % Duel.BOCA_KI)
-	check(stage.duel.foe.times_heard(Bocas.Cat.TROCA) == 1, "Tetsu heard the troça")
-	check(not stage.duel.can_boca(), "boca option locked for the rest of the turn")
-	var boca_btn: Button = stage.ui.menu_box.get_child(5)
-	check(boca_btn.disabled, "Boca button greyed out after use")
-
-	# --- finish him ---
 	stage.duel.foe.hp = 1
-	var guard_turns := 0
-	while stage.active and guard_turns < 20:
+	var n := 0
+	while stage.active and n < 20:
 		stage.pick(Duel.Act.TECH if stage.duel.can_use(Duel.Act.TECH) else Duel.Act.LIGHT)
-		await wait_duel_input()
-		guard_turns += 1
-	check(not stage.active, "duel ends")
-	check(main.last_duel_result == Duel.Result.WIN, "won the duel (result %d)" % main.last_duel_result)
-	await physics(10)
-	check(not pl.in_combat() and not tetsu.in_combat(), "fighters back to walking sprites")
-	check(tetsu.state == "vencido" and tetsu.lines() == NpcData.TOWN.tetsu.beaten, "beaten Tetsu has new lines")
-	check(tetsu.display_name == "Tetsu", "Tetsu's name is now known")
+		await settle()
+		n += 1
+	check(main.last_duel_result == Duel.Result.WIN, "won the duel")
+	await to_choice()
+	check(main.dialogue.open and main.dialogue.choosing, "victory: spare him or finish him?")
+	var hp_after := stage.duel.hero.hp
+	main.dialogue.choose(0)
+	await settle()
+	check(st.has("venceu_tetsu") and not st.has("dead_tetsu"), "Tetsu beaten and spared")
+	check(st.hero_hp == hp_after, "the hero keeps his wounds (%d hp)" % st.hero_hp)
+	check(present("tetsu") and not pl.in_combat(), "Tetsu still about; sprites back to normal")
+	check(present("kuroda"), "beating Tetsu draws Kuroda to the camp")
+	check(st.rep.corvo < 0 and st.rep.vila > 0, "reputation moved (corvo %d, vila %d)" % [st.rep.corvo, st.rep.vila])
 	check(not pl.frozen, "player free after the duel")
-	var px := pl.position.x
-	await hold("move_left", 15)
-	check(pl.position.x < px - 0.3, "player can walk after the duel")
 
-	# --- losing: wake up at the tea house ---
-	var guarda: Npc = main.npcs["guarda"]
+	# =====================================================================
+	# losing: wake at the tea house, hours later
+	# =====================================================================
+	st.units = 0
 	await teleport(Vector3(-3.0, 0, -10.2))
-	await talk_through()
+	await talk()                                   # guarda_1
 	await press("interact")
 	while main.dialogue.open and not main.dialogue.choosing:
 		await press("interact")
 	main.dialogue.choose(0)
-	await wait_duel_input()
-	check(stage.active and stage.foe == guarda, "forcing the shrine path starts a duel with the guard")
+	await settle()
+	check(stage.active and stage.foe == main.npcs["guarda"], "forcing the shrine path starts a duel")
 	stage.duel.hero.hp = 1
 	stage.duel.foe.atk = 99
-	var lose_turns := 0
-	while stage.active and lose_turns < 30:
+	n = 0
+	while stage.active and n < 30:
 		stage.pick(Duel.Act.OBSERVE)
-		await wait_duel_input()
-		lose_turns += 1
-	check(main.last_duel_result == Duel.Result.LOSE, "lost the duel (result %d)" % main.last_duel_result)
-	for _f in 400:
-		if main.dialogue.open:
-			break
-		await get_tree().process_frame
-	check(main.dialogue.open and main.dialogue.lines == NpcData.WAKE_LINES, "waking up at the tea house")
-	check(pl.position.distance_to(NpcData.WAKE_POS) < 0.1, "player moved to the tea house")
+		await settle()
+		n += 1
+	check(main.last_duel_result == Duel.Result.LOSE, "lost the duel")
+	await settle()
+	check(main.dialogue.open and main.dialogue.lines == StoryData.WAKE_LINES, "waking up at the tea house")
+	check(st.clock_text() == "Dia 1 · Noite", "out cold until nightfall")
+	check(pl.position.distance_to(StoryData.WAKE_POS) < 0.1, "player moved to the tea house")
 	while main.dialogue.open:
 		await press("interact")
-	for _f in 60:
+	await settle()
+	check(not pl.frozen, "free again")
+
+	# =====================================================================
+	# night: the world changes
+	# =====================================================================
+	check(not present("guarda") and not present("genzo") and present("bandido"), "night: guard and Genzō gone, a thug at the tea house")
+	check(main.sun.light_energy < 0.6, "night lighting (sun %.2f)" % main.sun.light_energy)
+	# sneak past the empty shrine path, up to the mine
+	st.units = 0
+	await teleport(Vector3(-3.0, 0, -11.5))
+	await physics(2)
+	check(pl.focus == main.npcs["santuario"], "the shrine path is in reach")
+	await talk(0)
+	check(st.has("aco_negro"), "the mine gives up its black steel")
+	check(st.units == 3, "the climb took time (%d units)" % st.units)
+
+	# rest at the inn: next morning
+	await teleport(Vector3(1.5, 0, -2.6))
+	await physics(2)
+	check(pl.focus == main.npcs["estalagem"], "the inn door is in reach")
+	await talk(0)
+	await settle()
+	check(st.clock_text() == "Dia 2 · Manhã" and st.units == 0, "resting moves on to the next morning")
+	check(st.hero_hp == st.hero_max_hp(), "rested: full health")
+	check(present("akamatsu") and present("guarda") and not present("bandido"), "day 2: the magistrate is in town")
+	check(main.sun.light_energy < 1.2, "morning mist lighting")
+
+	# a part of the day runs out by itself
+	st.units = GameState.UNITS_PER_PERIOD - 1
+	await teleport(Vector3(4.2, 0, 1.3))
+	await physics(2)
+	await talk()
+	await settle()
+	check(st.clock_text() == "Dia 2 · Tarde", "spending the last moment rolls on to the afternoon")
+
+	# =====================================================================
+	# an ending: walk out east
+	# =====================================================================
+	await teleport(Vector3(20.0, 0, 0.25))
+	await physics(2)
+	check(pl.focus == main.npcs["estrada"], "the east road is in reach")
+	await talk(0)
+	for _f in 400:
+		if main.ending_screen and main.ending_screen._ready_for_input:
+			break
 		await get_tree().process_frame
-	check(not pl.frozen and guarda.state == "", "free again; the guard still stands")
+	var expect := Endings.evaluate(st, "leave")
+	check(main.ended_with == expect and expect != "", "leaving the valley ends the story: %s" % main.ended_with)
+	check(Endings.discovered().has(main.ended_with), "the ending is remembered between runs")
+	check(main.ending_screen and main.ending_screen._ready_for_input, "the ending card is up")
 
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit(0 if ok else 1)

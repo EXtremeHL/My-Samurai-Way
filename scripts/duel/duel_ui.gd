@@ -24,6 +24,7 @@ var desc_label: RichTextLabel
 var desc_panel: PanelContainer
 var banner: Label
 var _descs := {}
+var blade_name := "Lâmina partida"
 var _bubbles := {}
 
 
@@ -190,7 +191,7 @@ func _fighter_panel(right: bool) -> Dictionary:
 # state display
 # ---------------------------------------------------------------------------
 func refresh(duel: Duel) -> void:
-	_fill(hero_panel, duel.hero, "Lâmina partida", true)
+	_fill(hero_panel, duel.hero, blade_name, true)
 	var sub := "Personalidade: ???"
 	if duel.foe.revealed:
 		sub = "Personalidade: %s" % Personality.NAMES[duel.foe.personality]

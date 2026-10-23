@@ -1,37 +1,28 @@
 class_name Npc
 extends Actor
-## A townsperson: stands (or paces) at a post and has dialogue.
+## Someone (or somewhere) you can talk to. What they say and where they
+## stand comes from Story/StoryData; this node only presents it.
 
 var npc_id := ""
 var display_name := ""
 var data: Dictionary = {}
-var state := ""                 # "" | "vencido"
 var home := Vector3.ZERO
-var lines_first: Array = []
-var lines_again: Array = []
-var times_talked := 0
 var home_facing := "down"
 var home_flip := false
 var _prompt: Label3D
 
 
-func setup(id: String, data: Dictionary) -> void:
+func setup(id: String, d: Dictionary) -> void:
 	npc_id = id
 	name = "Npc_" + id
-	self.data = data
-	display_name = data.name
-	home = data.pos
-	lines_first = data.first
-	lines_again = data.get("again", data.first)
-	position = data.pos
-	setup_actor(data.sheet)
-	home_facing = data.get("facing", "down")
-	home_flip = data.get("flip", false)
+	data = d
+	display_name = d.name
+	setup_actor(d.sheet)
+	home_facing = d.get("facing", "down")
+	home_flip = d.get("flip", false)
 	facing = home_facing
 	flip = home_flip
 	_apply_frame()
-	# collide as a solid obstacle but never get pushed
-	set_collision_layer_value(1, true)
 	_prompt = Label3D.new()
 	_prompt.text = "▼"
 	_prompt.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -41,15 +32,31 @@ func setup(id: String, data: Dictionary) -> void:
 	_prompt.outline_size = 12
 	_prompt.modulate = Color(1.0, 0.82, 0.35)
 	_prompt.outline_modulate = Color(0.08, 0.05, 0.12)
-	_prompt.position = Vector3(0, 1.9, 0)
+	_prompt.position = Vector3(0, _prompt_height(), 0)
 	_prompt.visible = false
 	add_child(_prompt)
 
 
-func lines() -> Array:
-	if state == "vencido" and data.has("beaten"):
-		return data.beaten
-	return lines_first if times_talked == 0 else lines_again
+func is_spot() -> bool:
+	return sprite == null
+
+
+func _prompt_height() -> float:
+	return 1.1 if is_spot() else 1.9
+
+
+## Put the NPC at `pos`, or take him off the map when pos is null.
+func place(pos: Variant) -> void:
+	var here := pos != null
+	visible = here
+	if body_shape:
+		body_shape.set_deferred("disabled", not here)
+	if here:
+		home = pos
+		position = pos
+		return_home()
+	else:
+		show_prompt(false)
 
 
 func show_prompt(on: bool) -> void:
@@ -58,11 +65,12 @@ func show_prompt(on: bool) -> void:
 
 func _process(_delta: float) -> void:
 	if _prompt and _prompt.visible:
-		_prompt.position.y = 1.9 + sin(Time.get_ticks_msec() * 0.006) * 0.06
+		_prompt.position.y = _prompt_height() + sin(Time.get_ticks_msec() * 0.006) * 0.06
 
 
 func turn_to(p: Vector3) -> void:
-	face_dir(p - position)
+	if not is_spot():
+		face_dir(p - position)
 
 
 func return_home() -> void:

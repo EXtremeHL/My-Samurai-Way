@@ -2,8 +2,8 @@ extends SceneTree
 ## Headless config smoke test:
 ##   godot --headless --path . -s tests/smoke_project_config.gd
 
-const EXPECTED_APP_NAME := "O Caminho do Ronin"
-const EXPECTED_ACTIONS := ["move_left", "move_right", "move_up", "move_down", "interact", "cancel", "run"]
+const EXPECTED_APP_NAME := "My Samurai Way"
+const EXPECTED_ACTIONS := ["move_left", "move_right", "move_up", "move_down", "interact", "cancel", "run", "journal"]
 
 
 func _init() -> void:
