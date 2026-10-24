@@ -11,6 +11,7 @@ const TALK_RANGE := 1.7
 var frozen := false           # true while a dialogue is open
 var npcs: Array[Npc] = []
 var focus: Npc = null         # NPC currently in talking range
+var _last_frame := 0
 
 
 func _ready() -> void:
@@ -30,7 +31,18 @@ func _physics_process(delta: float) -> void:
 	if dir.length() > 0.1:
 		face_dir(dir)
 	animate(velocity.length() > 0.1, delta, 1.5 if running else 1.0)
+	_footsteps()
 	_update_focus()
+
+
+## A step sound each time a foot lands (frames 1 and 3 of the walk cycle).
+func _footsteps() -> void:
+	if walk_frame != _last_frame and (walk_frame == 1 or walk_frame == 3):
+		if position.y > 0.05:
+			GameAudio.sfx("step_wood_%d" % (1 + walk_frame / 3), -8.0, 0.08)
+		else:
+			GameAudio.sfx("step_%d" % (1 + (walk_frame + int(position.x * 3.0)) % 3), -10.0, 0.1)
+	_last_frame = walk_frame
 
 
 func _update_focus() -> void:

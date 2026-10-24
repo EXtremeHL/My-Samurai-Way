@@ -113,6 +113,8 @@ func run(m: Node) -> void:
 	check(shown.size() == expected.size() and shown.size() >= 6, "the right people are about (%s)" % [shown])
 	check(not present("bandido") and not present("kuroda") and not present("akamatsu"), "night thugs and bosses not here yet")
 	check(pl.position.distance_to(StoryData.PLAYER_START) < 0.05, "player at start position")
+	var au: GameAudio = GameAudio.inst
+	check(au != null and au.current_music == "town_day" and au.current_amb == "amb_day", "afternoon: town music + day ambience")
 
 	# =====================================================================
 	# walking
@@ -121,6 +123,7 @@ func run(m: Node) -> void:
 	var seen_frames := await hold("move_right", 40)
 	check(pl.position.x > x0 + 1.5, "walking right moves player (%.2f -> %.2f)" % [x0, pl.position.x])
 	check(seen_frames.size() >= 3, "walk cycle animates (frames seen %s)" % [seen_frames])
+	check(au.played("step_1") or au.played("step_2") or au.played("step_3"), "footsteps on the dirt road")
 	check(pl.facing == "side" and not pl.flip, "faces right after walking right")
 	await hold("move_left", 10)
 	check(pl.facing == "side" and pl.flip, "faces left (flipped)")
@@ -150,6 +153,7 @@ func run(m: Node) -> void:
 	Input.action_release("move_right")
 	await physics(2)
 	check(pl.position.x > 14.8 and max_y > 0.25, "player crosses the arched bridge (x=%.2f, max y=%.2f)" % [pl.position.x, max_y])
+	check(au.played("step_wood_1") or au.played("step_wood_2"), "footsteps sound wooden on the bridge")
 	await teleport(Vector3(0.0, 0, 4.0))
 	await hold("move_down", 120)
 	check(pl.position.z < Village.BOUNDS.end.y, "southern bound holds")
@@ -197,6 +201,7 @@ func run(m: Node) -> void:
 	await press("journal")
 	check(main.hud.journal_open and pl.frozen, "Tab opens the journal and pauses the hero")
 	check(main.hud.journal_body.text.contains("Reputação"), "journal shows reputation")
+	check(au.history.back() == "page", "journal rustles like paper")
 	await press("journal")
 	check(not main.hud.journal_open and not pl.frozen, "Tab closes it")
 
@@ -223,6 +228,8 @@ func run(m: Node) -> void:
 	await press("interact")
 	await settle()
 	check(stage.active, "choosing 'Desembainhar' starts the duel")
+	check(au.played("choice") and au.played("ui_select"), "choices have their own sounds")
+	check(au.current_music == "duel" and au.played("duel_start"), "duel music + kabuki clappers")
 	check(pl.in_combat() and tetsu.in_combat(), "both fighters switch to combat sprites")
 	check(not main.hud.clock_panel.visible, "exploration HUD hidden in the duel")
 	var turn0 := stage.duel.turn
@@ -238,6 +245,7 @@ func run(m: Node) -> void:
 	stage.pick_boca(Bocas.Cat.TROCA)
 	await settle()
 	check(stage.duel.turn == t1 and stage.duel.hero.ki == 50 - Duel.BOCA_KI, "boca: same turn, -%d ki" % Duel.BOCA_KI)
+	check(au.played("boca") and (au.played("mood_good") or au.played("mood_bad") or au.played("mood_none")), "a boca has a stinger and a reaction sound")
 	stage.duel.foe.hp = 1
 	var n := 0
 	while stage.active and n < 20:
@@ -245,6 +253,9 @@ func run(m: Node) -> void:
 		await settle()
 		n += 1
 	check(main.last_duel_result == Duel.Result.WIN, "won the duel")
+	check(au.played("victory") and au.played("ko"), "victory fanfare and the fall")
+	check(au.played("slash_light") or au.played("slash_heavy") or au.played("tech"), "blades swish")
+	check(au.played("hit") or au.played("hit_heavy") or au.played("miss"), "blows land (or whiff)")
 	await to_choice()
 	check(main.dialogue.open and main.dialogue.choosing, "victory: spare him or finish him?")
 	var hp_after := stage.duel.hero.hp
@@ -256,6 +267,7 @@ func run(m: Node) -> void:
 	check(present("kuroda"), "beating Tetsu draws Kuroda to the camp")
 	check(st.rep.corvo < 0 and st.rep.vila > 0, "reputation moved (corvo %d, vila %d)" % [st.rep.corvo, st.rep.vila])
 	check(not pl.frozen, "player free after the duel")
+	check(au.current_music == "town_day", "town music comes back after the duel")
 
 	# =====================================================================
 	# losing: wake at the tea house, hours later
@@ -277,6 +289,7 @@ func run(m: Node) -> void:
 		await settle()
 		n += 1
 	check(main.last_duel_result == Duel.Result.LOSE, "lost the duel")
+	check(au.played("defeat"), "a mournful phrase for the defeat")
 	await settle()
 	check(main.dialogue.open and main.dialogue.lines == StoryData.WAKE_LINES, "waking up at the tea house")
 	check(st.clock_text() == "Dia 1 · Noite", "out cold until nightfall")
@@ -291,6 +304,7 @@ func run(m: Node) -> void:
 	# =====================================================================
 	check(not present("guarda") and not present("genzo") and present("bandido"), "night: guard and Genzō gone, a thug at the tea house")
 	check(main.sun.light_energy < 0.6, "night lighting (sun %.2f)" % main.sun.light_energy)
+	check(au.current_music == "town_night" and au.current_amb == "amb_night", "night music and crickets")
 	# sneak past the empty shrine path, up to the mine
 	st.units = 0
 	await teleport(Vector3(-3.0, 0, -11.5))
@@ -307,6 +321,7 @@ func run(m: Node) -> void:
 	await talk(0)
 	await settle()
 	check(st.clock_text() == "Dia 2 · Manhã" and st.units == 0, "resting moves on to the next morning")
+	check(au.played("bell") and au.current_music == "town_day", "a temple bell marks the new day; day music back")
 	check(st.hero_hp == st.hero_max_hp(), "rested: full health")
 	check(present("akamatsu") and present("guarda") and not present("bandido"), "day 2: the magistrate is in town")
 	check(main.sun.light_energy < 1.2, "morning mist lighting")
@@ -334,6 +349,7 @@ func run(m: Node) -> void:
 	check(main.ended_with == expect and expect != "", "leaving the valley ends the story: %s" % main.ended_with)
 	check(Endings.discovered().has(main.ended_with), "the ending is remembered between runs")
 	check(main.ending_screen and main.ending_screen._ready_for_input, "the ending card is up")
+	check(au.current_music == "ending" and au.current_amb == "" and au.played("ending_gong"), "the ending theme plays")
 
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit(0 if ok else 1)

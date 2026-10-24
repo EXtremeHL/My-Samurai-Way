@@ -73,6 +73,8 @@ func start(id: String, npc: Actor, spot: Vector3, hero_fighter: Fighter = null, 
 	_attrs_explore = cam.attributes
 	var to := Transform3D(Basis(), center + CAM_OFFSET).looking_at(center + CAM_LOOK, Vector3.UP)
 	cam.attributes = _attrs_duel
+	GameAudio.music("duel", 0.6)
+	GameAudio.sfx("duel_start", -2.0)
 	await _tween_cam(_cam_from, to, 0.7)
 	create_tween().tween_property(ui.root, "modulate:a", 1.0, 0.3)
 	ui.show_banner("DUELO", Color(1.0, 0.85, 0.5), 0.9)
@@ -86,13 +88,19 @@ func _finish() -> void:
 	var data: Dictionary = Foes.ALL[foe_id]
 	match duel.result:
 		Duel.Result.WIN:
+			GameAudio.music("", 0.4)
+			GameAudio.sfx("victory", -2.0)
 			ui.show_banner("VITÓRIA", Color(1.0, 0.86, 0.45), 1.4)
 			await _wait(1.0)
 			await _say("foe", duel.foe.name, data.win, 2.4)
 		Duel.Result.SURRENDER:
+			GameAudio.music("", 0.4)
+			GameAudio.sfx("victory", -2.0)
 			ui.show_banner("RENDIÇÃO", Color(0.7, 0.95, 0.7), 1.4)
 			await _wait(1.6)
 		Duel.Result.LOSE:
+			GameAudio.music("", 0.4)
+			GameAudio.sfx("defeat", -2.0)
 			ui.show_banner("DERROTA", Color(1.0, 0.45, 0.4), 1.4)
 			await _wait(1.0)
 			if data.lose != "":
@@ -222,7 +230,14 @@ func _play_events(ev: Array) -> void:
 	for e in ev:
 		match e.t:
 			"boca":
+				GameAudio.sfx("boca", -3.0)
 				await _say("hero", "Tu", e.line, 2.0)
+				if e.mood == Personality.Mood.NONE:
+					GameAudio.sfx("mood_none", -4.0)
+				elif e.mood in Personality.GOOD_FOR_SPEAKER:
+					GameAudio.sfx("mood_good", -3.0)
+				else:
+					GameAudio.sfx("mood_bad", -3.0)
 				if e.mood != Personality.Mood.NONE:
 					foe.set_flash(0.5)
 					create_tween().tween_method(foe.set_flash, 0.5, 0.0, 0.4)
@@ -230,6 +245,7 @@ func _play_events(ev: Array) -> void:
 						DuelUI.mood_color(e.mood, true), 34, 40.0)
 				await _say("foe", duel.foe.name, e.reply, 2.0)
 				if e.reveal:
+					GameAudio.sfx("reveal", -4.0)
 					var p: int = duel.foe.personality
 					ui.refresh(duel)
 					ui.show_banner(Personality.NAMES[p].to_upper(), Color(0.9, 0.85, 1.0), 1.3)
@@ -241,10 +257,12 @@ func _play_events(ev: Array) -> void:
 				ui.set_intent(duel.intent_text(), true)
 				await _wait(0.6)
 			"guard":
+				GameAudio.sfx("guard", -4.0, 0.05)
 				_actor(e.who).pose("guard")
 				ui.float_text("Guarda", _screen(_actor(e.who), 1.6), Color(0.7, 0.85, 1.0), 22)
 				await _wait(0.45)
 			"parry_stance":
+				GameAudio.sfx("guard", -6.0, 0.05, 1.2)
 				_actor(e.who).pose("guard")
 				ui.float_text("Contra-ataque...", _screen(_actor(e.who), 1.6), Color(0.7, 0.85, 1.0), 22)
 				await _wait(0.45)
@@ -273,11 +291,14 @@ func _play_events(ev: Array) -> void:
 				att.pose("raise")
 				dfn.pose("guard")
 				await _wait(0.25)
+				GameAudio.sfx("slash_heavy", -3.0, 0.05)
 				await _lunge(att, 0.55)
+				GameAudio.sfx("clash", -1.0, 0.04)
 				ui.float_text("Desviado!", _screen(dfn, 2.0), Color(0.7, 0.85, 1.0), 26)
 				dfn.pose("slash")
 				_slash_fx(att, e.by == "foe")
 				_hurt(att)
+				GameAudio.sfx("hit_heavy", -2.0, 0.05)
 				ui.float_text(str(e.dmg), _screen(att, 1.4), Color(1.0, 0.95, 0.85) if e.by == "hero" else Color(1.0, 0.5, 0.45), 40)
 				_shake(0.18)
 				ui.refresh(duel)
@@ -287,17 +308,21 @@ func _play_events(ev: Array) -> void:
 				ui.float_text("...ninguém atacou.", _screen(_actor(e.who), 1.7), Color(0.8, 0.8, 0.85), 20)
 				await _wait(0.5)
 			"skip":
+				GameAudio.sfx("mood_none", -6.0, 0.0, 0.8)
 				foe.pose("hurt")
 				await _say("foe", duel.foe.name, "...", 0.9)
 				ui.float_text("Distraído: perde a vez", _screen(foe, 2.1), DuelUI.GOOD, 22)
 				await _wait(0.6)
 			"taunt":
+				GameAudio.sfx("boca", -4.0, 0.0, 0.85)
 				await _say("foe", duel.foe.name, e.line, 2.0)
 				if e.mood != Personality.Mood.NONE:
+					GameAudio.sfx("mood_bad", -4.0)
 					ui.float_text("ABALADO", _screen(hero, 2.1), DuelUI.BAD, 30)
 					ui.refresh(duel)
 					await _wait(0.6)
 			"observe":
+				GameAudio.sfx("reveal", -4.0)
 				var p: int = e.personality
 				ui.refresh(duel)
 				ui.show_banner(Personality.NAMES[p].to_upper(), Color(0.9, 0.85, 1.0), 1.3)
@@ -307,6 +332,7 @@ func _play_events(ev: Array) -> void:
 				foe.pose("down")
 				await _say("foe", duel.foe.name, e.line, 2.2)
 			"ko":
+				GameAudio.sfx("ko", 0.0)
 				var a := _actor(e.who)
 				a.pose("down")
 				a.set_flash(0.8)
@@ -322,17 +348,22 @@ func _strike(who: String, kind: int, hits: bool) -> void:
 	att.pose("raise")
 	await _wait(0.28 if kind == Duel.Act.LIGHT else 0.45)
 	if kind == Duel.Act.TECH:
+		GameAudio.sfx("tech", -2.0)
 		att.set_flash(0.6)
 		ui.float_text(Duel.TECH_NAME, _screen(att, 2.2), Color(0.75, 0.9, 1.0), 26)
 		await _wait(0.35)
 		att.set_flash(0.0)
+	if kind != Duel.Act.TECH:
+		GameAudio.sfx("slash_light" if kind == Duel.Act.LIGHT else "slash_heavy", -3.0, 0.06)
 	await _lunge(att, 0.85 if kind == Duel.Act.LIGHT else 1.0)
 	att.pose("slash")
 	_slash_fx(tgt, who == "foe")
 	if hits:
+		GameAudio.sfx("hit" if kind == Duel.Act.LIGHT else "hit_heavy", -2.0, 0.06)
 		_hurt(tgt)
 		_shake(0.12 if kind == Duel.Act.LIGHT else 0.25)
 	else:
+		GameAudio.sfx("miss", -4.0, 0.08)
 		var side := 1.0 if who == "hero" else -1.0
 		var t := create_tween()
 		t.tween_property(tgt, "position:x", tgt.position.x + 0.35 * side, 0.1)

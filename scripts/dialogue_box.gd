@@ -168,6 +168,7 @@ func _start_choice(entry: Dictionary) -> void:
 	choosing = true
 	choice_index = 0
 	_choice_tags = entry.tags
+	GameAudio.sfx("choice", -4.0)
 	for c in _choice_box.get_children():
 		c.queue_free()
 	for i in entry.choice.size():
@@ -196,6 +197,7 @@ func choose(i: int) -> void:
 		return
 	choosing = false
 	_choice_panel.visible = false
+	GameAudio.sfx("ui_select", -3.0)
 	var tag: String = _choice_tags[i]
 	open = false
 	_set_visible(false)
@@ -208,8 +210,11 @@ func _process(delta: float) -> void:
 		_arrow.modulate.a = 0.0
 		return
 	if not line_complete():
+		var before := int(_shown)
 		_shown += delta * CPS
 		_text.visible_characters = int(_shown)
+		if int(_shown) / 3 != before / 3:
+			GameAudio.sfx("blip", -16.0, 0.12)
 		_arrow.modulate.a = 0.0
 	else:
 		_text.visible_characters = -1
@@ -225,9 +230,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("move_up") or event.is_action_pressed("ui_up"):
 			choice_index = (choice_index - 1 + n) % n
 			_refresh_choice()
+			GameAudio.sfx("ui_move", -6.0)
 		elif event.is_action_pressed("move_down") or event.is_action_pressed("ui_down"):
 			choice_index = (choice_index + 1) % n
 			_refresh_choice()
+			GameAudio.sfx("ui_move", -6.0)
 		elif event.is_action_pressed("interact"):
 			choose(choice_index)
 		elif event.is_action_pressed("cancel"):
@@ -246,6 +253,7 @@ func advance() -> void:
 		_text.visible_characters = -1
 		return
 	index += 1
+	GameAudio.sfx("ui_move", -12.0)
 	if index >= lines.size():
 		open = false
 		_set_visible(false)

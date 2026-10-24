@@ -25,6 +25,7 @@ var desc_panel: PanelContainer
 var banner: Label
 var _descs := {}
 var blade_name := "Lâmina partida"
+var _building := false          # suppresses focus sounds while a menu is rebuilt
 var _bubbles := {}
 
 
@@ -260,8 +261,13 @@ func _item(text: String, kind: String, value: int, desc: String, enabled := true
 		b.add_theme_stylebox_override(s, empty)
 	b.add_theme_stylebox_override("focus", focus)
 	b.add_theme_stylebox_override("hover", focus)
-	b.pressed.connect(func(): picked.emit(kind, value))
-	b.focus_entered.connect(func(): desc_label.text = desc)
+	b.pressed.connect(func():
+		GameAudio.sfx("ui_back" if kind == "back" else "ui_select", -4.0)
+		picked.emit(kind, value))
+	b.focus_entered.connect(func():
+		desc_label.text = desc
+		if not _building:
+			GameAudio.sfx("ui_move", -8.0))
 	b.mouse_entered.connect(func(): b.grab_focus())
 	menu_box.add_child(b)
 	_descs[b] = desc
@@ -320,7 +326,9 @@ func build_boca_menu(duel: Duel) -> void:
 func _focus_first() -> void:
 	for c in menu_box.get_children():
 		if c is Button and not c.disabled:
+			_building = true
 			c.grab_focus()
+			_building = false
 			desc_label.text = _descs[c]
 			return
 

@@ -33,9 +33,13 @@ var _pending: Array = []        # story commands collected during a conversation
 var _title: Label
 var hint: Label
 var _fade: ColorRect
+var audio: GameAudio
 
 
 func _ready() -> void:
+	audio = GameAudio.new()
+	audio.name = "Audio"
+	add_child(audio)
 	village = Village.new()
 	add_child(village)
 	village.build()
@@ -123,6 +127,16 @@ func refresh_world() -> void:
 		n.place(Story.present(id, state))
 		n.display_name = Story.display_name(id, state)
 	hud.refresh(state)
+	update_music()
+
+
+## Music + ambience follow the clock (the duel and the ending set their own).
+func update_music() -> void:
+	if stage.active or ended_with != "":
+		return
+	var night := state.period() == "noite"
+	GameAudio.music("town_night" if night else "town_day")
+	GameAudio.ambience("amb_night" if night else "amb_day")
 
 
 func _focus_point() -> Vector3:
@@ -151,6 +165,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		hud.toggle_journal(state)
 		player.frozen = hud.journal_open
+		GameAudio.sfx("page", -4.0, 0.05)
 
 
 ## Jump the camera to the player without easing (teleports, tests, shots).
@@ -249,6 +264,7 @@ func advance_time(rested: bool) -> void:
 		return
 	if not rested:
 		state.heal(0.3)
+	GameAudio.sfx("bell", -3.0)
 	await _fade_to(1.0, 0.6)
 	refresh_world()
 	snap_camera()
@@ -319,6 +335,7 @@ func _on_duel_finished(result: int, id: String) -> void:
 		await t.finished
 	player.snap_to_ground()
 	player.set_physics_process(true)
+	update_music()
 	if result == Duel.Result.LOSE:
 		await _wake_at_teahouse()
 		return
@@ -352,6 +369,9 @@ func _end(id: String) -> void:
 		id = Endings.evaluate(state, id)
 	ended_with = id
 	state.ending = id
+	GameAudio.music("ending", 2.0)
+	GameAudio.ambience("", 3.0)
+	GameAudio.sfx("ending_gong", -4.0)
 	player.frozen = true
 	player.set_physics_process(false)
 	hint.text = ""
