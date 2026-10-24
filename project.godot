@@ -59,6 +59,10 @@ journal={
 ]
 }
 
+[gui]
+
+theme/custom="res://assets/theme.tres"
+
 [rendering]
 
 rendering_method="forward_plus"

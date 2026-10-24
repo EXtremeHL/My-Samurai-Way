@@ -27,18 +27,26 @@ func _init() -> void:
 	check(refs.sfx.size() >= 20, "code references %d sound effects" % refs.sfx.size())
 	check(missing.is_empty(), "every referenced sound exists %s" % [missing])
 
-	var ga := GameAudio.new()
+	var listed := []
+	for n in refs.sfx:
+		if not (n in GameAudio.SFX):
+			listed.append(n)
+	check(listed.is_empty(), "every sfx the code plays is pre-registered in GameAudio.SFX %s" % [listed])
 	for n in GameAudio.LOOPS:
-		var s := ga.stream(GameAudio.MUSIC_DIR % n, true)
+		var s := GameAudio.load_stream(GameAudio.MUSIC_DIR % n)
 		if s == null:
 			check(false, "loop %s loads" % n)
 			continue
 		var w := s as AudioStreamWAV
 		check(w != null and w.loop_mode == AudioStreamWAV.LOOP_FORWARD and w.loop_end > w.mix_rate * 5,
-			"%s loops over its whole length (%.1f s)" % [n, s.get_length()])
-	var e := ga.stream(GameAudio.MUSIC_DIR % "ending", false)
+			"%s loops (set at import, works on the web) over %.1f s" % [n, s.get_length()])
+	var e := GameAudio.load_stream(GameAudio.MUSIC_DIR % "ending")
 	check(e != null and (e as AudioStreamWAV).loop_mode == AudioStreamWAV.LOOP_DISABLED, "the ending theme plays once")
-	ga.free()
+	for n in GameAudio.SFX:
+		var s := GameAudio.load_stream(GameAudio.SFX_DIR % n) as AudioStreamWAV
+		if s == null or s.loop_mode != AudioStreamWAV.LOOP_DISABLED:
+			check(false, "sfx %s loads and does not loop" % n)
+	check(true, "all %d sfx load as one-shots" % GameAudio.SFX.size())
 	print("RESULT: ", "PASS" if ok else "FAIL", " (%d checks)" % count)
 	quit(0 if ok else 1)
 

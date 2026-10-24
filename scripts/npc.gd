@@ -25,6 +25,7 @@ func setup(id: String, d: Dictionary) -> void:
 	_apply_frame()
 	_prompt = Label3D.new()
 	_prompt.text = "▼"
+	_prompt.font = load("res://assets/fonts/DejaVuSans-Bold.ttf")
 	_prompt.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_prompt.no_depth_test = true
 	_prompt.pixel_size = 0.006
