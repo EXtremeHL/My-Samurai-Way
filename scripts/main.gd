@@ -85,7 +85,7 @@ func _ready() -> void:
 	stage.finished.connect(_on_duel_finished)
 
 	var args := OS.get_cmdline_user_args()
-	if args.has("--playthrough") or args.has("--shots"):
+	if args.has("--playthrough") or args.has("--shots") or args.has("--promo"):
 		Endings.save_path = "user://finais_teste.cfg"
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(Endings.save_path))
 	refresh_world()
@@ -100,6 +100,10 @@ func _ready() -> void:
 	i = args.find("--shots")
 	if i >= 0 and i + 1 < args.size():
 		_shots(args[i + 1])
+		return
+	i = args.find("--promo")
+	if i >= 0 and i + 1 < args.size():
+		_promo(args[i + 1])
 		return
 	if args.has("--playthrough"):
 		var script: GDScript = load("res://tests/playthrough_runner.gd")
@@ -529,4 +533,97 @@ func _shots(dir: String) -> void:
 	await _end("leave")
 	await _wait(20)
 	_save_shot(dir, "shot_ending.png")
+	get_tree().quit(0)
+
+
+## Store-page screenshots: run windowed with --resolution 1920x1080.
+func _promo(dir: String) -> void:
+	hud.visible = false
+	# 1. golden afternoon on the main street, title card up
+	player.position = Vector3(-2.2, 0, 0.6)
+	player.face_dir(Vector3.LEFT)
+	player.walk_frame = 2
+	player._apply_frame()
+	player.set_physics_process(false)
+	snap_camera()
+	_title.text = "My Samurai Way\n— Kurogane-juku —"
+	_title.modulate.a = 1.0
+	await _wait(60)
+	_save_shot(dir, "cover_source.png")
+	_title.modulate.a = 0.0
+	await _wait(30)
+	_save_shot(dir, "01_tarde.png")
+	# 2. talking to Oyuki at the tea house
+	player.position = Vector3(-7.3, 0, -0.75)
+	player.face_dir(Vector3.FORWARD)
+	player._apply_frame()
+	snap_camera()
+	await _wait(10)
+	hud.visible = true
+	_on_interact(npcs["oyuki"])
+	await get_tree().create_timer(2.6).timeout
+	_save_shot(dir, "02_dialogo.png")
+	while dialogue.open:
+		dialogue.advance()
+	await _wait(5)
+	current_entry = {}
+	player.frozen = false
+	# 3. night: the Corvo thug harassing Oyuki, lanterns lit
+	_goto(1, "noite")
+	await _wait(5)
+	player.position = Vector3(-5.6, 0, 0.5)
+	player.face_dir(Vector3.LEFT)
+	snap_camera()
+	await _wait(5)
+	_on_interact(npcs["bandido"])
+	while not dialogue.choosing:
+		dialogue.advance()
+		await _wait(2)
+	await _wait(40)
+	_save_shot(dir, "03_noite_escolha.png")
+	dialogue.choose(2)
+	await _wait(5)
+	current_entry = {}
+	player.frozen = false
+	# 4. misty morning by the bridge
+	_goto(2, "manha")
+	player.position = Vector3(10.6, 0, 0.3)
+	player.face_dir(Vector3.RIGHT)
+	snap_camera()
+	await _wait(60)
+	_save_shot(dir, "04_manha_ponte.png")
+	# 5. the journal, in the street
+	_goto(2, "tarde")
+	player.position = Vector3(1.0, 0, 0.8)
+	snap_camera()
+	state.set_flag("conhece_tetsu")
+	state.set_flag("quer_aco")
+	state.set_flag("salvou_oyuki")
+	state.add_rep("vila", 25)
+	state.add_rep("corvo", -15)
+	hud.toggle_journal(state)
+	await _wait(40)
+	_save_shot(dir, "09_diario.png")
+	hud.toggle_journal(state)
+	player.frozen = false
+	# 6. a duel with Tetsu: the boca and his reply
+	duel_seed = 7
+	player.position = Vector3(-4.9, 0, -0.6)
+	snap_camera()
+	await _wait(10)
+	start_duel("tetsu")
+	await stage.awaiting_input
+	await _wait(20)
+	_save_shot(dir, "05_duelo_menu.png")
+	stage._on_picked("boca_menu", 0)
+	await _wait(10)
+	stage.pick_boca(Bocas.Cat.INSULTO)
+	await get_tree().create_timer(1.0).timeout
+	_save_shot(dir, "06_duelo_boca.png")
+	await get_tree().create_timer(1.9).timeout
+	_save_shot(dir, "07_duelo_reacao.png")
+	await stage.awaiting_input
+	stage.pick(Duel.Act.HEAVY)
+	await get_tree().create_timer(0.66).timeout
+	_save_shot(dir, "08_duelo_golpe.png")
 	get_tree().quit(0)
