@@ -97,6 +97,22 @@ Balanceamento medido com jogadores simulados (`tests/test_duel.gd`, 400 duelos c
 | Tetsu (orgulhoso) | 16% | 71% | 86% | 27% |
 | Guarda (cobarde) | 44% | 83% | 97% | 35% |
 
+## Som e música
+Tudo é sintetizado em código e determinístico (os mesmos ficheiros em cada execução):
+```bash
+uv run --with numpy python tools/gen_sfx.py   && uv run --with numpy python tools/verify_sfx.py
+uv run --with numpy python tools/gen_music.py && uv run --with numpy python tools/verify_music.py
+```
+- **Música** (`assets/audio/music/`), na escala miyako-bushi em Ré:
+  - `town_day`: koto e shakuhachi, 80 BPM.
+  - `town_night`: drone, koto esparso e sino de templo.
+  - `duel`: taiko, shime-daiko, shamisen e hyoshigi, 132 BPM.
+  - `ending`: shakuhachi a solo.
+- **Ambiente**: `amb_day` (vento, pássaros, riacho) e `amb_night` (grilos, riacho).
+- **30 efeitos** (`assets/audio/sfx/`): espadas, impactos, contra-ataque metálico, bocas, reações,
+  passos em terra e em madeira, sino das horas, interface e máquina de escrever.
+- A música e o ambiente seguem o relógio, com crossfade. O duelo e o final têm música própria.
+
 ## Controlos
 | Tecla | Ação |
 |---|---|
@@ -119,6 +135,7 @@ GODOT=".../Godot_v4.7-stable_win64_console.exe"
 ## Testes
 ```bash
 "$GODOT" --headless --path . -s tests/smoke_project_config.gd   # config + input map
+"$GODOT" --headless --path . -s tests/test_audio.gd              # todos os sons referidos existem; loops em loop
 "$GODOT" --headless --path . -s tests/test_story.gd              # história: dados, horários, rotas para os 10 finais
 "$GODOT" --headless --path . -s tests/test_duel.gd               # lógica do duelo + balanceamento
 "$GODOT" --headless --path . -s tests/foe_report.gd              # taxas de vitória por adversário e estilo
