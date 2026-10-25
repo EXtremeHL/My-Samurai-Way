@@ -80,6 +80,7 @@ func _ready() -> void:
 	hud = StoryHUD.new()
 	add_child(hud)
 	dialogue = DialogueBox.new()
+	dialogue.portraits = Story.portrait_table()
 	add_child(dialogue)
 	dialogue.finished.connect(_on_dialogue_finished)
 	dialogue.choice_made.connect(_on_choice)

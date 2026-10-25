@@ -43,6 +43,20 @@ static func display_name(id: String, s: GameState) -> String:
 	return n
 
 
+## Every name a speaker can appear under -> the portrait sheet to show.
+## "Tu" is the hero; the narrator ("") has no portrait.
+static func portrait_table() -> Dictionary:
+	var table := {"Tu": "hero"}
+	for id in StoryData.CHARS:
+		var c: Dictionary = StoryData.CHARS[id]
+		if c.sheet == "":
+			continue
+		table[c.name] = c.sheet
+		for f in c.get("names", {}):
+			table[c.names[f]] = c.sheet
+	return table
+
+
 static func entry_ok(e: Dictionary, s: GameState) -> bool:
 	if e.get("chained", false):
 		return false

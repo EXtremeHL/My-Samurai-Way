@@ -23,6 +23,7 @@ func _init() -> void:
 	test_schedules()
 	test_routes_to_every_ending()
 	test_save_round_trip()
+	test_every_speaker_has_a_portrait()
 	print("RESULT: ", "PASS" if ok else "FAIL", " (%d checks)" % count)
 	quit(0 if ok else 1)
 
@@ -404,3 +405,23 @@ func test_save_round_trip() -> void:
 	check(SaveGame.read().is_empty() and SaveGame.summary() == "", "a corrupt file reads as no save")
 	SaveGame.erase()
 	check(not SaveGame.exists(), "erase removes it")
+
+
+func test_every_speaker_has_a_portrait() -> void:
+	var table := Story.portrait_table()
+	var speakers := {}
+	for id in StoryData.CHARS:
+		for e in StoryData.CHARS[id].get("talks", []):
+			for line in e.get("lines", []):
+				if line is Array and line[0] != "":
+					speakers[line[0]] = true
+	for line in StoryData.WAKE_LINES:
+		if line is Array and line[0] != "":
+			speakers[line[0]] = true
+	var missing := []
+	for sp in speakers:
+		var sheet: String = table.get(sp, "")
+		if sheet == "" or not ResourceLoader.exists("res://assets/sprites/portrait_%s.png" % sheet):
+			missing.append(sp)
+	check(speakers.size() >= 8 and missing.is_empty(),
+			"every one of the %d speakers has a portrait %s" % [speakers.size(), missing])

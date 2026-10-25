@@ -724,6 +724,185 @@ def ui_seal(w: int = 48, h: int = 40, seed: int = 5) -> Image.Image:
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
 
 
+# ---------------------------------------------------------------------------
+# dialogue portraits: 64x64 busts, 2 frames (mouth closed / open)
+# ---------------------------------------------------------------------------
+PW = 64
+# per archetype: brow style, extra features
+PORTRAIT_LOOK = {
+    "hero": dict(brow="stern"),
+    "ronin": dict(brow="stern", stubble=True),
+    "villager": dict(brow="soft", grin=True),
+    "girl": dict(brow="soft", lips=True, blush=True),
+    "guard": dict(brow="angry"),
+    "elder": dict(brow="bushy", beard=True, wrinkles=True),
+    "bandit": dict(brow="angry", stubble=True, messy=True),
+    "kuroda": dict(brow="angry", scar=True),
+    "akamatsu": dict(brow="smug", mustache=True),
+}
+LIP = ramp("#b84a4a", "#8a3030", "#d86a6a")
+BLUSH = ramp("#e89a8a", "#e89a8a", "#e89a8a")
+
+
+def build_portrait(arch: str, mouth_open: bool = False) -> Image.Image:
+    a = ARCHETYPES[arch]
+    look = PORTRAIT_LOOK[arch]
+    s = Sprite(PW, PW)
+    for name in ("kimono", "trim", "hair", "skin"):
+        s.region(name, a[name])
+    s.region("skin_d", (a["skin"][1], a["skin"][1], a["skin"][0]))
+    s.region("eye", EYE)
+    s.region("white", WHITE)
+    s.region("gold", GOLD)
+    s.region("brow", (a["hair"][1],) * 3)
+    s.region("shade", (a["skin"][1],) * 3)
+    s.region("mouth", ((90, 40, 44),) * 3)
+    s.region("lip", LIP)
+    s.region("blush", BLUSH)
+    if a.get("hat"):
+        s.region("hat", a["hat"])
+    if a.get("headband"):
+        s.region("band", a["headband"])
+    cx = 32
+    # --- shoulders and collar ---
+    s.poly("kimono", [(4, 64), (8, 52), (20, 45), (44, 45), (56, 52), (60, 64)])
+    s.poly("white", [(25, 45), (39, 45), (32, 58)])
+    s.line("trim", [(23, 45), (32, 61)], width=3)
+    s.line("trim", [(41, 45), (32, 61)], width=3)
+    s.region("fold", (a["kimono"][1],) * 3)
+    s.line("fold", [(12, 54), (16, 64)], flat=True)
+    s.line("fold", [(52, 54), (48, 64)], flat=True)
+    if arch == "akamatsu":
+        s.line("gold", [(23, 47), (31, 61)], flat=True)
+        s.line("gold", [(41, 47), (33, 61)], flat=True)
+    # --- neck ---
+    s.rect("skin_d", 27, 37, 37, 46)
+    # --- hair behind the head ---
+    if a.get("longhair"):
+        s.poly("hair", [(17, 18), (47, 18), (50, 50), (40, 46), (24, 46), (14, 50)])
+    if a.get("wild") or look.get("messy"):
+        spikes = [(16, 26), (13, 14), (19, 16), (20, 6), (26, 11), (30, 3), (34, 10), (39, 4),
+                  (42, 12), (48, 8), (47, 17), (52, 16), (48, 26)]
+        if look.get("messy"):
+            spikes = [(17, 24), (15, 15), (21, 14), (24, 8), (30, 11), (34, 7), (38, 11), (44, 9),
+                      (45, 15), (49, 16), (47, 24)]
+        s.poly("hair", spikes)
+    s.ellipse("hair", cx, 21, 14, 13)
+    # --- ears, face ---
+    s.ellipse("skin", 19, 28, 2.5, 3.5)
+    s.ellipse("skin", 45, 28, 2.5, 3.5)
+    s.poly("skin", [(20, 18), (44, 18), (44, 31), (39, 39), (32, 42), (25, 39), (20, 31)])
+    # --- fringe ---
+    if arch == "elder":
+        s.poly("hair", [(19, 14), (45, 14), (44, 18), (20, 18)])        # receding, swept back
+    elif a.get("longhair"):
+        s.poly("hair", [(18, 13), (46, 13), (45, 22), (40, 18), (34, 21), (29, 18), (23, 21), (19, 22)])
+    else:
+        s.poly("hair", [(18, 12), (46, 12), (45, 20), (39, 17), (35, 20), (30, 17), (25, 20), (19, 21)])
+    # --- eyes ---
+    for ex in (26, 38):
+        s.rect("white", ex - 2, 27, ex + 2, 29, flat=True)
+        s.rect("eye", ex - 1, 27, ex + 1, 29, flat=True)
+        s.line("eye", [(ex - 3, 26), (ex + 3, 26)], flat=True)        # upper lid
+        s.px("white", ex, 27)                                          # catchlight
+    # --- brows ---
+    st = look["brow"]
+    if st == "soft":
+        s.line("brow", [(22, 23), (25, 22), (29, 23)], flat=True)
+        s.line("brow", [(35, 23), (39, 22), (42, 23)], flat=True)
+    elif st == "angry":
+        s.line("brow", [(22, 21), (29, 24)], width=2, flat=True)
+        s.line("brow", [(35, 24), (42, 21)], width=2, flat=True)
+    elif st == "bushy":
+        s.region("brow", HAIR_GREY)
+        s.line("brow", [(21, 23), (29, 23)], width=2)
+        s.line("brow", [(35, 23), (43, 23)], width=2)
+    elif st == "smug":
+        s.line("brow", [(22, 22), (29, 23)], flat=True)
+        s.line("brow", [(35, 21), (42, 23)], flat=True)
+    else:  # stern
+        s.line("brow", [(22, 22), (29, 23)], width=2, flat=True)
+        s.line("brow", [(35, 23), (42, 22)], width=2, flat=True)
+    # --- nose, cheeks ---
+    s.line("shade", [(32, 29), (33, 32)], flat=True)
+    s.px("shade", 31, 33)
+    if look.get("blush"):
+        for bx in (23, 40):
+            s.line("blush", [(bx, 32), (bx + 2, 32)], flat=True)
+    if look.get("wrinkles"):
+        s.line("shade", [(22, 31), (24, 33)], flat=True)
+        s.line("shade", [(42, 31), (40, 33)], flat=True)
+        s.line("shade", [(28, 20), (36, 20)], flat=True)
+    if look.get("stubble"):
+        for (x, y) in [(26, 37), (28, 39), (31, 40), (34, 40), (36, 39), (38, 37), (30, 38), (35, 38)]:
+            s.px("shade", x, y)
+    # --- mouth ---
+    if mouth_open:
+        s.rect("mouth", 30, 35, 34, 36, flat=True)
+    elif look.get("lips"):
+        s.line("lip", [(30, 36), (34, 36)], flat=True)
+    elif look.get("grin"):
+        s.line("mouth", [(28, 35), (30, 36), (34, 36), (36, 35)], flat=True)
+    else:
+        s.line("mouth", [(29, 36), (35, 36)], flat=True)
+    if look.get("mustache"):
+        s.line("brow", [(26, 35), (30, 34)], flat=True)
+        s.line("brow", [(34, 34), (38, 35)], flat=True)
+        s.line("brow", [(26, 35), (25, 38)], flat=True)
+        s.line("brow", [(38, 35), (39, 38)], flat=True)
+    if look.get("beard"):
+        s.poly("hair", [(24, 37), (40, 37), (37, 46), (32, 50), (27, 46)])
+        if mouth_open:
+            s.rect("mouth", 30, 37, 34, 38, flat=True)   # visible through the beard
+        else:
+            s.line("mouth", [(29, 38), (35, 38)], flat=True)
+        s.line("hair", [(26, 35), (38, 35)])                       # mustache
+    if look.get("scar"):
+        s.region("scar", ((196, 86, 86),) * 3)
+        s.line("scar", [(36, 20), (41, 33)], flat=True)
+    # --- headgear ---
+    if a["topknot"]:
+        s.rect("hair", 29, 3, 35, 10)
+        s.line("white", [(29, 10), (35, 10)], flat=True)
+    if a.get("headband"):
+        s.rect("band", 18, 15, 46, 17)
+        if arch == "bandit":
+            s.poly("band", [(44, 15), (50, 20), (48, 23), (44, 18)])     # knot tails
+    if a.get("hat"):
+        if a.get("eboshi"):
+            s.poly("hat", [(22, 14), (42, 14), (40, 0), (25, 1)])
+            s.line("hat", [(20, 14), (44, 14)], width=2)
+        elif a.get("jingasa"):
+            s.poly("hat", [(4, 17), (60, 17), (50, 8), (14, 8)])
+            s.ellipse("gold", 32, 11, 3, 2.2, flat=True)
+            s.region("strap", ((60, 50, 50),) * 3)
+            s.line("strap", [(20, 18), (24, 38)], flat=True)
+            s.line("strap", [(44, 18), (40, 38)], flat=True)
+        else:
+            # straw kasa: the brim shades the eyes - only a glint shows
+            s.poly("hat", [(0, 26), (64, 26), (32, 2)])
+            s.region("weave", (a["hat"][1],) * 3)
+            for i in range(7):
+                s.line("weave", [(32, 3), (3 + i * 10, 25)], flat=True)
+            s.region("hatshade", (a["skin"][1],) * 3)
+            s.rect("hatshade", 21, 27, 43, 28, flat=True)
+            for ex in (26, 38):
+                s.px("white", ex, 28)
+    if a.get("longhair"):
+        # kanzashi: gold pin and a red flower
+        s.line("gold", [(44, 12), (51, 7)], flat=True)
+        s.region("flower", ramp("#d84858", "#a83040", "#f07888"))
+        s.ellipse("flower", 46, 13, 2.5, 2.5)
+    return s.render()
+
+
+def portrait_sheet(arch: str) -> Image.Image:
+    sheet = Image.new("RGBA", (PW * 2, PW), (0, 0, 0, 0))
+    sheet.alpha_composite(build_portrait(arch, False), (0, 0))
+    sheet.alpha_composite(build_portrait(arch, True), (PW, 0))
+    return sheet
+
+
 def character_sheet(arch: str) -> Image.Image:
     """Rows: down, up, side. Columns: idle, walk1..4."""
     sheet = Image.new("RGBA", (CW * 5, CH * 3), (0, 0, 0, 0))
@@ -1018,6 +1197,7 @@ def main():
     os.makedirs(TEX, exist_ok=True)
     for arch in ARCHETYPES:
         character_sheet(arch).save(os.path.join(SPR, f"char_{arch}.png"))
+        portrait_sheet(arch).save(os.path.join(SPR, f"portrait_{arch}.png"))
         if ARCHETYPES[arch]["sword"]:
             combat_sheet(arch).save(os.path.join(SPR, f"combat_{arch}.png"))
     fx_slash().save(os.path.join(SPR, "fx_slash.png"))

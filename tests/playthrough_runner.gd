@@ -174,6 +174,7 @@ func run(m: Node) -> void:
 	await press("interact")
 	check(main.dialogue.open and main.current_entry.id == "oyuki_1", "first talk with Oyuki")
 	check(oyuki.facing == "down", "Oyuki turns toward the player")
+	check(main.dialogue.current_portrait() == "girl" and main.dialogue._portrait_panel.visible, "her portrait shows beside the text")
 	var before := pl.position
 	await hold("move_left", 20)
 	check(pl.position.distance_to(before) < 0.01, "player can't walk during dialogue")

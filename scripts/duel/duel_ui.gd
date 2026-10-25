@@ -311,14 +311,16 @@ func bubble(key: String, speaker: String, text: String, screen_pos: Vector2, tin
 	await get_tree().process_frame
 	if not is_instance_valid(p):
 		return
+	# beside the speaker's head, on the outer side, so the face stays visible
 	var sz := p.size
-	var pos := screen_pos - Vector2(sz.x * 0.5, sz.y)
+	var left := key == "hero"
+	var pos := Vector2(screen_pos.x - sz.x - 34 if left else screen_pos.x + 34, screen_pos.y - sz.y * 0.35)
 	var vp := get_viewport().get_visible_rect().size
 	pos.x = clampf(pos.x, 20, vp.x - sz.x - 20)
 	pos.y = clampf(pos.y, 222, vp.y - sz.y - 150)
 	p.position = pos
 	p.scale = Vector2(0.85, 0.85)
-	p.pivot_offset = Vector2(sz.x * 0.5, sz.y)
+	p.pivot_offset = Vector2(sz.x if left else 0.0, sz.y * 0.5)
 	create_tween().tween_property(p, "scale", Vector2.ONE, 0.12)
 	_bubbles[key] = p
 

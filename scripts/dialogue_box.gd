@@ -7,6 +7,9 @@ signal finished
 signal choice_made(tag: String)
 
 const CPS := 48.0              # characters per second
+const PORTRAIT_SIZE := 192     # 64 px art x3
+const PORTRAIT_LEFT := 96
+const PORTRAIT_FRAME := 64
 
 var lines: Array = []
 var index := 0
@@ -23,6 +26,13 @@ var choice_index := 0
 var _choice_tags: Array = []
 var _choice_panel: PanelContainer
 var _choice_box: VBoxContainer
+var _portrait_panel: PanelContainer
+var _portrait: TextureRect
+var _portrait_tex: AtlasTexture
+var _text_margin: MarginContainer
+var _talk_t := 0.0
+## speaker name -> portrait sheet id ("" = none). Filled by the game.
+var portraits := {}
 
 
 func _ready() -> void:
@@ -47,6 +57,7 @@ func _ready() -> void:
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_top", 12)    # clear of the top ink rule
 	_panel.add_child(margin)
+	_text_margin = margin
 
 	_text = RichTextLabel.new()
 	_text.bbcode_enabled = true
@@ -70,6 +81,27 @@ func _ready() -> void:
 	_name_label.add_theme_font_size_override("font_size", 22)
 	_name_label.add_theme_color_override("font_color", UiStyle.SEAL_TEXT)
 	_name_tag.add_child(_name_label)
+
+	# portrait: a washi card standing on the box's left end, rising above it
+	_portrait_panel = PanelContainer.new()
+	_portrait_panel.add_theme_stylebox_override("panel", UiStyle.paper(8, 6))
+	_portrait_panel.anchor_top = 1.0
+	_portrait_panel.anchor_bottom = 1.0
+	_portrait_panel.offset_left = PORTRAIT_LEFT
+	_portrait_panel.offset_right = PORTRAIT_LEFT + PORTRAIT_SIZE + 34
+	_portrait_panel.offset_top = -40 - PORTRAIT_SIZE - 30
+	_portrait_panel.offset_bottom = -40
+	root.add_child(_portrait_panel)
+	_portrait = TextureRect.new()
+	_portrait.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_portrait_tex = AtlasTexture.new()
+	_portrait.texture = _portrait_tex
+	_portrait_panel.add_child(_portrait)
+	# the name seal sits on the portrait's lower edge
+	root.move_child(_name_tag, -1)
 
 	_arrow = Label.new()
 	_arrow.text = "▼"
@@ -107,6 +139,7 @@ func _ready() -> void:
 func _set_visible(on: bool) -> void:
 	_panel.visible = on
 	_name_tag.visible = on
+	_portrait_panel.visible = on and _portrait_tex.atlas != null
 	_arrow.visible = on
 	_choice_panel.visible = on and choosing
 
@@ -137,10 +170,39 @@ func _show_line() -> void:
 	var speaker: String = lines[index][0]
 	_name_tag.visible = speaker != ""
 	_name_label.text = speaker
+	_set_portrait(portraits.get(speaker, ""))
 	var txt: String = lines[index][1]
 	_text.text = "[i][color=#%s]%s[/color][/i]" % [UiStyle.INK_SOFT.to_html(false), txt] if speaker == "" else txt
 	_shown = 0.0
 	_text.visible_characters = 0
+
+
+## Shows the speaker's bust (or none) and makes room for it in the box.
+func _set_portrait(sheet: String) -> void:
+	var path := "res://assets/sprites/portrait_%s.png" % sheet
+	var has := sheet != "" and ResourceLoader.exists(path)
+	if has:
+		_portrait_tex.atlas = load(path)
+		_portrait_tex.region = Rect2(0, 0, PORTRAIT_FRAME, PORTRAIT_FRAME)
+	else:
+		_portrait_tex.atlas = null
+	_portrait_panel.visible = has and open
+	# text starts right of the portrait; the name seal moves onto it
+	_text_margin.add_theme_constant_override("margin_left", PORTRAIT_SIZE + 30 - 110 + PORTRAIT_LEFT if has else 0)
+	_name_tag.offset_left = (PORTRAIT_LEFT + 14) if has else 140
+	_name_tag.offset_top = -64 if has else -198
+	_name_tag.offset_bottom = -28 if has else -162
+
+
+func _mouth(open_mouth: bool) -> void:
+	if _portrait_tex.atlas:
+		_portrait_tex.region = Rect2(PORTRAIT_FRAME if open_mouth else 0, 0, PORTRAIT_FRAME, PORTRAIT_FRAME)
+
+
+func current_portrait() -> String:
+	if _portrait_tex.atlas == null:
+		return ""
+	return _portrait_tex.atlas.resource_path.get_file().trim_prefix("portrait_").get_basename()
 
 
 ## A choice entry: {"choice": [labels...], "tags": [tags...]}. The previous
@@ -194,11 +256,14 @@ func _process(delta: float) -> void:
 		var before := int(_shown)
 		_shown += delta * CPS
 		_text.visible_characters = int(_shown)
+		_talk_t += delta
+		_mouth(int(_talk_t * 7.0) % 2 == 1)
 		if int(_shown) / 3 != before / 3:
 			GameAudio.sfx("blip", -16.0, 0.12)
 		_arrow.modulate.a = 0.0
 	else:
 		_text.visible_characters = -1
+		_mouth(false)
 		_blink += delta
 		_arrow.modulate.a = 0.5 + 0.5 * sin(_blink * 6.0)
 
