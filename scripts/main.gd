@@ -727,9 +727,26 @@ func _promo(dir: String) -> void:
 	await get_tree().create_timer(1.9).timeout
 	_save_shot(dir, "07_duelo_reacao.png")
 	await stage.awaiting_input
-	stage.pick(Duel.Act.HEAVY)
-	await get_tree().create_timer(0.66).timeout
-	_save_shot(dir, "08_duelo_golpe.png")
+	# the hero's heavy blow landing on Tetsu (retry turns until one connects)
+	var caught := false
+	for _turn in 6:
+		stage.duel.hero.hp = stage.duel.hero.max_hp
+		stage.duel.foe.hp = stage.duel.foe.max_hp
+		stage.pick(Duel.Act.HEAVY)
+		for _i in 240:
+			if stage.foe.current_pose == "hurt" and not stage.hero.current_pose in ["hurt", "guard"]:
+				caught = true
+				break
+			await get_tree().process_frame
+			if not stage.busy:
+				break
+		if caught:
+			await get_tree().create_timer(0.3).timeout   # game time: let hit-stop end and the white flash fade
+			_save_shot(dir, "08_duelo_golpe.png")
+			break
+		while stage.busy:                    # the turn is still playing out
+			await get_tree().process_frame
+		await _wait(2)
 	get_tree().quit(0)
 
 
