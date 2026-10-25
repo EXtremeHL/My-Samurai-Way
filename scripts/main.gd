@@ -448,6 +448,9 @@ func _end(id: String) -> void:
 	player.frozen = true
 	player.set_physics_process(false)
 	hint.text = ""
+	if is_instance_valid(stage.ui):
+		stage.ui.visible = false        # no duel panels behind the ending sheet
+	hud.visible = false
 	ending_screen = EndingScreen.new()
 	add_child(ending_screen)
 	ending_screen.restart.connect(back_to_title)

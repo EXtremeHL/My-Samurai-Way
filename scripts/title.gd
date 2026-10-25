@@ -12,8 +12,8 @@ extends Node
 ## once.
 
 const GAME_SCENE := "res://scenes/main.tscn"
-const GOLD := Color(0.95, 0.78, 0.5)
-const CREAM := Color(1.0, 0.94, 0.84)
+const GOLD := UiStyle.GOLD
+const CREAM := UiStyle.CREAM
 
 var game: Node = null
 var ready_to_play := false
@@ -123,12 +123,17 @@ func _build_ui() -> void:
 	col.add_child(_label("My Samurai Way", 84, CREAM, 6))
 	col.add_child(_label("Um ronin. Um vale dividido. Três dias para decidir.", 22, GOLD, 3))
 	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 46)
+	gap.custom_minimum_size = Vector2(0, 30)
 	col.add_child(gap)
 
+	var sheet_row := CenterContainer.new()
+	col.add_child(sheet_row)
+	var sheet := UiStyle.panel(40, 18)
+	sheet.custom_minimum_size.x = 520
+	sheet_row.add_child(sheet)
 	_menu_box = VBoxContainer.new()
 	_menu_box.add_theme_constant_override("separation", 6)
-	col.add_child(_menu_box)
+	sheet.add_child(UiStyle.margin(_menu_box, 0, 8))
 	var saved := SaveGame.summary()
 	_items = []
 	if saved != "":
@@ -141,7 +146,7 @@ func _build_ui() -> void:
 	else:
 		_items.append({"label": "Sair", "action": "quit"})
 	for i in _items.size():
-		var l := _label("", 30, CREAM, 4)
+		var l := UiStyle.ink_label("", 28)
 		l.mouse_filter = Control.MOUSE_FILTER_STOP
 		l.mouse_entered.connect(_hover.bind(i))
 		l.gui_input.connect(_item_input.bind(i))
@@ -184,8 +189,8 @@ func _refresh_menu() -> void:
 			txt += "  (a preparar…)"
 		if _items[i]["action"] == "new" and _confirm_new:
 			txt = "Novo jogo? A partida gravada será apagada — confirma"
-		l.text = ("▶  %s  ◀" % txt) if on else txt
-		l.add_theme_color_override("font_color", GOLD if on else CREAM)
+		l.text = UiStyle.menu_text(txt, on)
+		l.add_theme_color_override("font_color", UiStyle.VERMILION if on else UiStyle.INK)
 
 
 # ---------------------------------------------------------------------------

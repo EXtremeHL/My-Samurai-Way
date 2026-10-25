@@ -1,6 +1,6 @@
 class_name EndingScreen
 extends CanvasLayer
-## Full-screen ending card. [E] starts a new journey.
+## Ending card: a washi sheet over the darkened valley. [E] back to the title.
 
 signal restart
 
@@ -15,34 +15,37 @@ func show_ending(id: String, s: GameState, speed := 1.0) -> void:
 	var e: Dictionary = Endings.ALL[id]
 	var seen := Endings.record(id)
 	_root = ColorRect.new()
-	_root.color = Color(0.02, 0.02, 0.04, 0.0)
+	_root.color = Color(0.03, 0.02, 0.04, 0.0)     # the valley stays faintly visible behind
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
+	var sheet := UiStyle.panel(56, 30)
+	sheet.set_anchors_preset(Control.PRESET_CENTER)
+	sheet.offset_left = -470
+	sheet.offset_right = 470
+	sheet.offset_top = -300
+	sheet.offset_bottom = 300
+	sheet.modulate.a = 0.0
+	_root.add_child(sheet)
 	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.offset_left = -440
-	box.offset_right = 440
-	box.offset_top = -270
-	box.offset_bottom = 270
-	box.add_theme_constant_override("separation", 14)
-	box.modulate.a = 0.0
-	_root.add_child(box)
-	box.add_child(_label("My Samurai Way  ·  FIM", 20, Color(0.75, 0.65, 0.5), true))
-	box.add_child(_label(e.title, 44, Color(1.0, 0.9, 0.7), true))
-	var body := RichTextLabel.new()
-	body.bbcode_enabled = true
+	box.add_theme_constant_override("separation", 12)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	sheet.add_child(box)
+	box.add_child(_label("My Samurai Way", 18, UiStyle.INK_FAINT, true))
+	var seal_row := CenterContainer.new()
+	seal_row.add_child(UiStyle.seal_panel("FIM", 20))
+	box.add_child(seal_row)
+	box.add_child(_label(e.title, 44, UiStyle.VERMILION, true))
+	var body := UiStyle.ink_rich(21)
 	body.fit_content = true
-	body.add_theme_font_size_override("normal_font_size", 20)
-	body.add_theme_color_override("default_color", Color(0.92, 0.9, 0.85))
 	body.text = "[center]%s[/center]" % "\n\n".join(e.text)
 	box.add_child(body)
 	var rep := "Corvo %+d · Magistrado %+d · Vila %+d   —   %s" % [s.rep.corvo, s.rep.magistrado, s.rep.vila, s.clock_text()]
-	box.add_child(_label(rep, 16, Color(0.65, 0.62, 0.72), true))
-	box.add_child(_label("Finais descobertos: %d de %d" % [seen.size(), Endings.ALL.size()], 18, Color(0.85, 0.75, 0.55), true))
-	box.add_child(_label("[E] Começar uma nova viagem", 18, Color(0.95, 0.9, 0.8), true))
+	box.add_child(_label(rep, 16, UiStyle.INK_SOFT, true))
+	box.add_child(_label("Finais descobertos: %d de %d" % [seen.size(), Endings.ALL.size()], 18, UiStyle.INK, true))
+	box.add_child(_label("[E] Voltar ao título", 18, UiStyle.VERMILION, true))
 	var tw := create_tween()
-	tw.tween_property(_root, "color:a", 1.0, 1.2 * speed)
-	tw.tween_property(box, "modulate:a", 1.0, 1.0 * speed)
+	tw.tween_property(_root, "color:a", 0.78, 1.2 * speed)
+	tw.tween_property(sheet, "modulate:a", 1.0, 1.0 * speed)
 	await tw.finished
 	_ready_for_input = true
 

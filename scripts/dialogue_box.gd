@@ -41,86 +41,67 @@ func _ready() -> void:
 	_panel.offset_right = -110
 	_panel.offset_top = -178
 	_panel.offset_bottom = -30
-	_panel.add_theme_stylebox_override("panel", _box(Color(0.06, 0.07, 0.14, 0.9), Color(0.85, 0.7, 0.4), 3))
+	_panel.add_theme_stylebox_override("panel", UiStyle.paper(26, 14))
 	root.add_child(_panel)
 
 	var margin := MarginContainer.new()
-	for s in ["left", "right"]:
-		margin.add_theme_constant_override("margin_" + s, 28)
-	margin.add_theme_constant_override("margin_top", 26)
-	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.add_theme_constant_override("margin_top", 12)    # clear of the top ink rule
 	_panel.add_child(margin)
 
 	_text = RichTextLabel.new()
 	_text.bbcode_enabled = true
 	_text.scroll_active = false
-	_text.add_theme_font_size_override("normal_font_size", 23)
-	_text.add_theme_color_override("default_color", Color(0.96, 0.93, 0.86))
+	_text.add_theme_font_size_override("normal_font_size", 25)
+	_text.add_theme_font_size_override("italics_font_size", 24)
+	_text.add_theme_color_override("default_color", UiStyle.INK)
 	_text.add_theme_constant_override("line_separation", 6)
 	margin.add_child(_text)
 
 	_name_tag = PanelContainer.new()
-	_name_tag.add_theme_stylebox_override("panel", _box(Color(0.5, 0.12, 0.12, 0.95), Color(0.85, 0.7, 0.4), 2))
+	_name_tag.add_theme_stylebox_override("panel", UiStyle.seal(16, 3))
 	_name_tag.anchor_top = 1.0
 	_name_tag.anchor_bottom = 1.0
 	_name_tag.offset_left = 140
-	_name_tag.offset_top = -196
-	_name_tag.offset_bottom = -164
+	_name_tag.offset_top = -198
+	_name_tag.offset_bottom = -162
 	_name_tag.grow_horizontal = Control.GROW_DIRECTION_END
 	root.add_child(_name_tag)
 	_name_label = Label.new()
-	_name_label.add_theme_font_size_override("font_size", 20)
-	_name_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.8))
-	var nm := MarginContainer.new()
-	for s in ["left", "right"]:
-		nm.add_theme_constant_override("margin_" + s, 14)
-	nm.add_child(_name_label)
-	_name_tag.add_child(nm)
+	_name_label.add_theme_font_size_override("font_size", 22)
+	_name_label.add_theme_color_override("font_color", UiStyle.SEAL_TEXT)
+	_name_tag.add_child(_name_label)
 
 	_arrow = Label.new()
 	_arrow.text = "▼"
 	_arrow.add_theme_font_size_override("font_size", 18)
-	_arrow.add_theme_color_override("font_color", Color(0.95, 0.78, 0.45))
+	_arrow.add_theme_color_override("font_color", UiStyle.VERMILION)
 	_arrow.anchor_left = 1.0
 	_arrow.anchor_right = 1.0
 	_arrow.anchor_top = 1.0
 	_arrow.anchor_bottom = 1.0
-	_arrow.offset_left = -150
-	_arrow.offset_top = -62
+	_arrow.offset_left = -152
+	_arrow.offset_top = -74
 	root.add_child(_arrow)
 
 	_choice_panel = PanelContainer.new()
-	_choice_panel.add_theme_stylebox_override("panel", _box(Color(0.06, 0.07, 0.14, 0.95), Color(0.85, 0.7, 0.4), 3))
+	_choice_panel.add_theme_stylebox_override("panel", UiStyle.paper(18, 12))
 	_choice_panel.anchor_left = 1.0
 	_choice_panel.anchor_right = 1.0
 	_choice_panel.anchor_top = 1.0
 	_choice_panel.anchor_bottom = 1.0
-	_choice_panel.offset_left = -440
+	_choice_panel.offset_left = -470
 	_choice_panel.offset_right = -130
 	_choice_panel.offset_bottom = -196
 	_choice_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(_choice_panel)
 	var cm := MarginContainer.new()
-	for s in ["left", "right", "top", "bottom"]:
-		cm.add_theme_constant_override("margin_" + s, 14)
+	cm.add_theme_constant_override("margin_top", 10)
+	cm.add_theme_constant_override("margin_bottom", 4)
 	_choice_panel.add_child(cm)
 	_choice_box = VBoxContainer.new()
 	_choice_box.add_theme_constant_override("separation", 6)
 	cm.add_child(_choice_box)
 	_set_visible(false)
-
-
-func _box(bg: Color, border: Color, w: int) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(w)
-	sb.set_corner_radius_all(4)
-	sb.shadow_color = Color(0, 0, 0, 0.45)
-	sb.shadow_size = 6
-	sb.content_margin_top = 2
-	sb.content_margin_bottom = 2
-	return sb
 
 
 func _set_visible(on: bool) -> void:
@@ -157,7 +138,7 @@ func _show_line() -> void:
 	_name_tag.visible = speaker != ""
 	_name_label.text = speaker
 	var txt: String = lines[index][1]
-	_text.text = "[i]%s[/i]" % txt if speaker == "" else txt
+	_text.text = "[i][color=#%s]%s[/color][/i]" % [UiStyle.INK_SOFT.to_html(false), txt] if speaker == "" else txt
 	_shown = 0.0
 	_text.visible_characters = 0
 
@@ -173,7 +154,7 @@ func _start_choice(entry: Dictionary) -> void:
 		c.queue_free()
 	for i in entry.choice.size():
 		var l := Label.new()
-		l.add_theme_font_size_override("font_size", 22)
+		l.add_theme_font_size_override("font_size", 23)
 		_choice_box.add_child(l)
 	_text.visible_characters = -1
 	_choice_panel.visible = true
@@ -187,8 +168,8 @@ func _refresh_choice(labels: Array = []) -> void:
 		if not labels.is_empty():
 			l.set_meta("label", labels[i])
 		var sel := i == choice_index
-		l.text = ("▶ " if sel else "   ") + str(l.get_meta("label"))
-		l.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45) if sel else Color(0.85, 0.82, 0.76))
+		l.text = UiStyle.menu_text(str(l.get_meta("label")), sel)
+		l.add_theme_color_override("font_color", UiStyle.VERMILION if sel else UiStyle.INK)
 
 
 func choose(i: int) -> void:

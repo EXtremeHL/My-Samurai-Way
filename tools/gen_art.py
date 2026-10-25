@@ -17,7 +17,7 @@ import os
 import random
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFilter, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPR = os.path.join(ROOT, "assets", "sprites")
@@ -574,6 +574,99 @@ def fx_fire(frames: int = 6, w: int = 24, h: int = 34) -> Image.Image:
     return Image.fromarray(sheet, "RGBA")
 
 
+# ---------------------------------------------------------------------------
+# UI: washi paper + hanko seal (9-slice textures for StyleBoxTexture)
+# ---------------------------------------------------------------------------
+UI_MARGIN = 24          # 9-slice margin in px (must match UiStyle.PAPER_MARGIN)
+
+
+def _soft(mask: np.ndarray, radius: int) -> np.ndarray:
+    im = Image.fromarray((mask * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(radius))
+    return np.asarray(im, float) / 255
+
+
+def ui_washi(size: int = 128, seed: int = 21, base=(232, 220, 194)) -> Image.Image:
+    """Washi sheet with deckled edges, fibres, two ink brush rules and a soft
+    drop shadow baked into the margin (StyleBoxTexture has no shadow).
+
+    Godot tiles the 9-slice centre and edges (TILE_FIT), so every pattern
+    that crosses them is periodic with the centre width c = size - 2*margin:
+    the paper grain is one c x c periodic tile repeated, and the deckle and
+    the brush rules use whole-number frequencies over c. No seams."""
+    rng = np.random.default_rng(seed)
+    n, M = size, UI_MARGIN
+    c = n - 2 * M
+    # --- periodic grain tile (c x c) ---
+    yy, xx = np.mgrid[0:c, 0:c] / c
+    blot = np.zeros((c, c))
+    for fx, fy in ((1, 0), (0, 1), (1, 1), (2, 1), (1, 2), (3, 2)):
+        blot += rng.uniform(0.3, 1.0) * np.sin(TAU_F * (fx * xx + fy * yy) + rng.uniform(0, TAU_F))
+    blot = (blot - blot.min()) / np.ptp(blot)
+    fib = np.zeros((c, c))
+    for _ in range(int(c * c / 240)):
+        x, y = rng.integers(0, c), rng.integers(0, c)
+        L, ang = rng.integers(4, 14), rng.uniform(0, np.pi)
+        v = rng.uniform(0.4, 1.0)
+        for k in range(L):
+            fib[int(y + np.sin(ang) * k) % c, int(x + np.cos(ang) * k) % c] = v
+    tile = np.zeros((c, c, 3))
+    for ch in range(3):
+        tile[..., ch] = base[ch] * (0.975 + 0.025 * blot) - fib * 15
+    idx = (np.arange(n) - M) % c
+    grain = tile[idx][:, idx]
+    # --- paper shape with a periodic deckle ---
+    lo, hi = 6, n - 10
+    paper = np.zeros((n, n))
+    paper[lo:hi, lo:hi] = 1
+    for side in range(4):
+        ph = rng.uniform(0, TAU_F, 3)
+        for i in range(lo, hi):
+            u = (i - M) / c
+            s = np.sin(TAU_F * 2 * u + ph[0]) + 0.6 * np.sin(TAU_F * 5 * u + ph[1]) + 0.3 * np.sin(TAU_F * 11 * u + ph[2])
+            d = max(0, min(3, int(round(1.2 + 0.9 * s))))
+            if side == 0: paper[lo:lo + d, i] = 0
+            if side == 1: paper[hi - d:hi, i] = 0
+            if side == 2: paper[i, lo:lo + d] = 0
+            if side == 3: paper[i, hi - d:hi] = 0
+    shadow = _soft(np.roll(np.roll(paper, 5, 0), 4, 1), 4) * 0.42
+    out = np.zeros((n, n, 4))
+    out[..., :3] = grain
+    # --- ink brush rules (top and bottom margins), wobble periodic over c ---
+    for y0, w in ((13, 2), (n - 21, 2)):
+        for x in range(lo + 6, hi - 6):
+            fade = min(1.0, (x - lo - 6) / 10, (hi - 6 - x) / 10)
+            j = int(round(0.7 * np.sin(TAU_F * 3 * (x - M) / c + y0)))
+            for yv in range(y0 + j, y0 + j + w):
+                a = 0.75 * fade
+                out[yv, x, :3] = out[yv, x, :3] * (1 - a) + np.array([44, 34, 30]) * a
+    alpha = np.maximum(paper, shadow)
+    for ch in range(3):
+        out[..., ch] = np.where(paper > 0, out[..., ch], 18)
+    out[..., 3] = alpha * 255
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
+
+
+def ui_seal(w: int = 48, h: int = 40, seed: int = 5) -> Image.Image:
+    """Vermilion hanko block: rough stamped edge, paler inner frame, ink speckle."""
+    rng = np.random.default_rng(seed)
+    red = np.array([176, 36, 30], float)
+    out = np.zeros((h, w, 4))
+    for y in range(h):
+        for x in range(w):
+            edge = min(x, y, w - 1 - x, h - 1 - y)
+            if edge < 1 or (edge < 2 and rng.random() < 0.35):
+                continue
+            k = 0.95 + 0.06 * rng.random()
+            col = red * k
+            if edge in (4,) and rng.random() < 0.85:        # inner frame line
+                col = np.array([236, 196, 180])
+            if rng.random() < 0.015:                         # missing ink
+                col = col * 0.0 + np.array([214, 120, 100])
+            out[y, x, :3] = col
+            out[y, x, 3] = 255
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
+
+
 def character_sheet(arch: str) -> Image.Image:
     """Rows: down, up, side. Columns: idle, walk1..4."""
     sheet = Image.new("RGBA", (CW * 5, CH * 3), (0, 0, 0, 0))
@@ -873,6 +966,10 @@ def main():
     fx_slash().save(os.path.join(SPR, "fx_slash.png"))
     fx_hit().save(os.path.join(SPR, "fx_hit.png"))
     fx_fire().save(os.path.join(SPR, "fx_fire.png"))
+    ui_dir = os.path.join(os.path.dirname(SPR), "ui")
+    os.makedirs(ui_dir, exist_ok=True)
+    ui_washi().save(os.path.join(ui_dir, "washi.png"))
+    ui_seal().save(os.path.join(ui_dir, "seal.png"))
     sakura().save(os.path.join(SPR, "tree_sakura.png"))
     pine().save(os.path.join(SPR, "tree_pine.png"))
     maple().save(os.path.join(SPR, "tree_maple.png"))

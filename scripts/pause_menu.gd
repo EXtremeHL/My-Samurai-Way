@@ -2,8 +2,6 @@ class_name PauseMenu
 extends CanvasLayer
 ## Esc while exploring: continue, save, back to the title. Pauses the tree.
 
-const GOLD := Color(0.95, 0.78, 0.5)
-const CREAM := Color(1.0, 0.94, 0.84)
 const ITEMS := [["Continuar", "resume"], ["Gravar partida", "save"], ["Voltar ao título", "title"]]
 
 var game: Node
@@ -26,20 +24,27 @@ func _ready() -> void:
 	_root.visible = false
 	add_child(_root)
 	var dim := ColorRect.new()
-	dim.color = Color(0.03, 0.02, 0.05, 0.62)
+	dim.color = Color(0.03, 0.02, 0.05, 0.5)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(dim)
+	var sheet := UiStyle.panel(48, 26)
+	sheet.set_anchors_preset(Control.PRESET_CENTER)
+	sheet.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	sheet.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_root.add_child(sheet)
 	var col := VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_FULL_RECT)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 12)
-	_root.add_child(col)
-	col.add_child(_label("Pausa", 44, CREAM))
+	col.add_theme_constant_override("separation", 10)
+	sheet.add_child(col)
+	var seal_row := CenterContainer.new()
+	seal_row.add_child(UiStyle.seal_panel("Pausa", 24))
+	col.add_child(seal_row)
 	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 18)
+	gap.custom_minimum_size = Vector2(0, 8)
 	col.add_child(gap)
 	for i in ITEMS.size():
-		var l := _label("", 28, CREAM)
+		var l := _label("", 28, UiStyle.INK)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		l.mouse_filter = Control.MOUSE_FILTER_STOP
 		l.mouse_entered.connect(func(): _sel = i; _refresh())
 		l.gui_input.connect(func(e: InputEvent):
@@ -48,7 +53,7 @@ func _ready() -> void:
 		col.add_child(l)
 		_labels.append(l)
 	_note = _label("A partida também é gravada sozinha a cada conversa e a cada parte do dia.", 16,
-			Color(0.82, 0.78, 0.72))
+			UiStyle.INK_SOFT)
 	col.add_child(_note)
 
 
@@ -58,16 +63,14 @@ func _label(text: String, size: int, color: Color) -> Label:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", Color(0.06, 0.03, 0.05))
-	l.add_theme_constant_override("outline_size", 5)
 	return l
 
 
 func _refresh() -> void:
 	for i in _labels.size():
 		var on := i == _sel
-		_labels[i].text = ("▶  %s  ◀" % ITEMS[i][0]) if on else ITEMS[i][0]
-		_labels[i].add_theme_color_override("font_color", GOLD if on else CREAM)
+		_labels[i].text = UiStyle.menu_text(ITEMS[i][0], on)
+		_labels[i].add_theme_color_override("font_color", UiStyle.VERMILION if on else UiStyle.INK)
 
 
 func open() -> void:
