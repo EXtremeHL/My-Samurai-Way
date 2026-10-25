@@ -6,14 +6,34 @@ extends Node3D
 
 var lantern_lights: Array[OmniLight3D] = []
 var lantern_mat: StandardMaterial3D
-var water_mat: StandardMaterial3D
+var water_mat: ShaderMaterial
+var shoji_mat: StandardMaterial3D        # glows from inside after dark
+var roof_mats: Array[StandardMaterial3D] = []
+var halo_mat: StandardMaterial3D         # soft additive halo around every lantern
 var petals: CPUParticles3D
 var fireflies: CPUParticles3D
 var campfire: Campfire
+var fires: Array[Campfire] = []          # campfire + braziers
+## Lights mirrored in the stream: [world position, strength]
+var reflected: Array = []
+var night := 0.0
 
 
 func build() -> void:
 	lantern_mat = Mat.glow(Color(1.0, 0.45, 0.25), 1.0)
+	halo_mat = StandardMaterial3D.new()
+	halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	halo_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	halo_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	halo_mat.albedo_texture = preload("res://assets/sprites/fx_halo.png")
+	halo_mat.albedo_color = Color(1.0, 0.62, 0.32, 0.0)
+	halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	halo_mat.disable_receive_shadows = true
+	shoji_mat = Mat.tex("shoji").duplicate()
+	shoji_mat.emission_enabled = true
+	shoji_mat.emission_texture = shoji_mat.albedo_texture
+	shoji_mat.emission = Color(1.0, 0.7, 0.4)
+	shoji_mat.emission_energy_multiplier = 0.0
 	_ground()
 	_stream_and_bridge()
 	_backdrop()
@@ -25,6 +45,11 @@ func build() -> void:
 	_teahouse_front(Vector3(-8.5, 0, -2.3))
 	_stone_lantern(Vector3(-4.4, 0, -2.4))
 	_stone_lantern(Vector3(-1.6, 0, -2.4))
+	# lanterns on both banks, upstream: they shine in the water at night
+	_stone_lantern(Vector3(10.55, 0, -4.4))
+	_stone_lantern(Vector3(14.45, 0, -7.2))
+	reflected.append([Vector3(11.5, 0, -4.4), 0.9])
+	reflected.append([Vector3(13.5, 0, -7.2), 0.8])
 	_well(Vector3(5.2, 0, 3.4))
 	_camp()
 	_props()
@@ -33,9 +58,27 @@ func build() -> void:
 	_particles()
 
 
-func _process(delta: float) -> void:
-	if water_mat:
-		water_mat.uv1_offset.z -= delta * 0.12
+## Day -> night: 0 .. 1. Everything that changes after dark (besides the
+## light rig in Look) goes through here.
+func set_night(k: float) -> void:
+	night = k
+	water_mat.set_shader_parameter("night", k)
+	var arr := []
+	for i in 6:
+		if i < reflected.size():
+			var r: Array = reflected[i]
+			arr.append(Vector4(r[0].x, r[0].y, r[0].z, r[1]))
+		else:
+			arr.append(Vector4.ZERO)
+	water_mat.set_shader_parameter("lights", arr)
+	shoji_mat.emission_energy_multiplier = 0.75 * k
+	halo_mat.albedo_color.a = 0.55 * k
+	for m in roof_mats:
+		# moonlight sheen on the glazed tiles
+		m.roughness = lerpf(1.0, 0.42, k)
+		m.metallic_specular = lerpf(0.15, 0.6, k)
+	for f in fires:
+		f.base_energy = lerpf(1.4, 2.6, k)
 
 
 # ---------------------------------------------------------------------------
@@ -107,21 +150,59 @@ func sprite(path: String, pos: Vector3, scale_f := 1.0, fw := 0, fh := 0) -> Pix
 # ---------------------------------------------------------------------------
 # terrain
 # ---------------------------------------------------------------------------
+## Soft additive glow card around a light source (visible at night only).
+func halo(pos: Vector3, size: float, parent: Node3D = null) -> void:
+	var m := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2.ONE * size
+	m.mesh = q
+	m.material_override = halo_mat
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	m.position = pos
+	(parent if parent else self).add_child(m)
+
+
+## A box split into tiles of about `tile` metres. The web build's
+## Compatibility renderer lights each object with at most a few lights, so one
+## huge ground mesh silently loses most of the lantern pools; small tiles each
+## only meet the lanterns near them. Triplanar world UVs keep it seamless.
+func tiled_box(pos: Vector3, size: Vector3, mat: Material, tile := 6.0) -> void:
+	var nx := maxi(1, ceili(size.x / tile))
+	var nz := maxi(1, ceili(size.z / tile))
+	var sx := size.x / nx
+	var sz := size.z / nz
+	for ix in nx:
+		for iz in nz:
+			var c := pos + Vector3(-size.x * 0.5 + sx * (ix + 0.5), 0, -size.z * 0.5 + sz * (iz + 0.5))
+			box(c, Vector3(sx, size.y, sz), mat)
+
+
 func _ground() -> void:
 	var grass := Mat.tex("grass")
-	# split around the stream channel (x 11.25 .. 13.75)
-	box(Vector3(-24.0, -0.5, -10.0), Vector3(70.5, 1.0, 80.0), grass)
-	box(Vector3(30.0, -0.5, -10.0), Vector3(32.5, 1.0, 80.0), grass)
+	# split around the stream channel (x 11.25 .. 13.75); the lit town area is
+	# tiled finely, the far fields stay single boxes
+	tiled_box(Vector3(-2.0, -0.5, -2.0), Vector3(26.5, 1.0, 20.0), grass)          # x -15.25..11.25, z -12..8
+	box(Vector3(-37.25, -0.5, -10.0), Vector3(44.0, 1.0, 80.0), grass)                 # x -59.25..-15.25
+	box(Vector3(-2.0, -0.5, -31.0), Vector3(26.5, 1.0, 38.0), grass)
+	box(Vector3(-2.0, -0.5, 19.0), Vector3(26.5, 1.0, 22.0), grass)
+	tiled_box(Vector3(19.75, -0.5, -2.0), Vector3(12.0, 1.0, 20.0), grass)        # far bank x 13.75..25.75
+	box(Vector3(36.0, -0.5, -10.0), Vector3(20.5, 1.0, 80.0), grass)                   # x 25.75..46.25
+	box(Vector3(19.75, -0.5, -31.0), Vector3(12.0, 1.0, 38.0), grass)
+	box(Vector3(19.75, -0.5, 19.0), Vector3(12.0, 1.0, 22.0), grass)
 	var dirt := Mat.tex("dirt")
-	box(Vector3(-2.0, 0.005, 0.25), Vector3(26.5, 0.02, 3.6), dirt)        # main street
-	box(Vector3(-3.0, 0.004, -7.5), Vector3(2.2, 0.02, 12.0), dirt)        # shrine path
-	box(Vector3(18.0, 0.005, 0.25), Vector3(8.5, 0.02, 3.6), dirt)         # road past the bridge
+	tiled_box(Vector3(-2.0, 0.005, 0.25), Vector3(26.5, 0.02, 3.6), dirt)        # main street
+	tiled_box(Vector3(-3.0, 0.004, -7.5), Vector3(2.2, 0.02, 12.0), dirt)        # shrine path
+	tiled_box(Vector3(18.0, 0.005, 0.25), Vector3(8.5, 0.02, 3.6), dirt)         # road past the bridge
 
 
 func _stream_and_bridge() -> void:
-	water_mat = Mat.tex("water").duplicate()
-	water_mat.roughness = 0.12
-	water_mat.metallic_specular = 0.7
+	water_mat = ShaderMaterial.new()
+	water_mat.shader = preload("res://shaders/water.gdshader")
+	var wt: Texture2D = load("res://assets/textures/water.png")
+	water_mat.set_shader_parameter("water_tex", wt)
+	water_mat.set_shader_parameter("tex_size", float(wt.get_width()))
+	water_mat.set_shader_parameter("texels_per_metre", Mat.TEXELS_PER_METRE)
+	water_mat.set_shader_parameter("pixel", 1.0 / Mat.TEXELS_PER_METRE)
 	box(Vector3(12.5, -0.35, -10.0), Vector3(2.6, 0.1, 80.0), water_mat)
 	box(Vector3(12.5, -0.9, -10.0), Vector3(2.6, 1.0, 80.0), Mat.col(Color(0.15, 0.25, 0.3)))
 	var stone := Mat.tex("stone")
@@ -145,6 +226,19 @@ func _stream_and_bridge() -> void:
 		box(Vector3(12.5, 0.88, zz), Vector3(3.6, 0.1, 0.12), red)
 		for cap_x in [10.9, 14.1]:
 			cyl(Vector3(cap_x, 0.98, zz), 0.0, 0.1, 0.18, Mat.col(Color(0.2, 0.18, 0.16)), 6)
+	# two paper lanterns hung over the downstream rail; one light for both
+	for lx in [11.7, 13.3]:
+		var lp := Vector3(lx, 1.32, 1.75)
+		box(lp + Vector3(0, 0.3, 0), Vector3(0.03, 0.28, 0.03), Mat.col(Color(0.1, 0.08, 0.08)))
+		cyl(lp, 0.12, 0.12, 0.32, lantern_mat, 8)
+		halo(lp, 1.0)
+		reflected.append([Vector3(lx, 0, 1.75), 1.2])
+	var bl := OmniLight3D.new()
+	bl.position = Vector3(12.5, 1.4, 1.9)
+	bl.light_color = Color(1.0, 0.6, 0.32)
+	bl.omni_range = 4.5
+	add_child(bl)
+	lantern_lights.append(bl)
 
 
 func _backdrop() -> void:
@@ -211,7 +305,7 @@ func _house(center: Vector3, size: Vector3, roof_tint: Color, kind: String, side
 	box(Vector3(0, 0.3 + h - 0.08, fz + 0.06), Vector3(w + 0.1, 0.18, 0.16), dark, Vector3.ZERO, root)
 	box(Vector3(0, 0.3 + h * 0.62, fz + 0.06), Vector3(w + 0.1, 0.1, 0.12), dark, Vector3.ZERO, root)
 	# sliding shoji doors in the middle bays + upper lattice windows
-	var shoji := Mat.tex("shoji")
+	var shoji := shoji_mat
 	box(Vector3(0, 0.3 + 0.95, fz + 0.04), Vector3(w * 0.45, 1.3, 0.06), shoji, Vector3.ZERO, root)
 	box(Vector3(-w * 0.3, 0.3 + h * 0.8, fz + 0.04), Vector3(w * 0.2, 0.45, 0.06), shoji, Vector3.ZERO, root)
 	box(Vector3(w * 0.3, 0.3 + h * 0.8, fz + 0.04), Vector3(w * 0.2, 0.45, 0.06), shoji, Vector3.ZERO, root)
@@ -223,6 +317,8 @@ func _house(center: Vector3, size: Vector3, roof_tint: Color, kind: String, side
 			Mat.col(noren_col), Vector3.ZERO, root)
 	# gabled tiled roof, ridge along X, generous eaves
 	var roof := Mat.tex("roof", roof_tint)
+	if not roof in roof_mats:
+		roof_mats.append(roof)
 	var pitch := 24.0
 	var half_d := d * 0.5 + 0.7
 	var slope := half_d / cos(deg_to_rad(pitch))
@@ -253,6 +349,7 @@ func _house(center: Vector3, size: Vector3, roof_tint: Color, kind: String, side
 func _paper_lantern(parent: Node3D, pos: Vector3) -> void:
 	box(pos + Vector3(0, 0.38, 0), Vector3(0.03, 0.3, 0.03), Mat.col(Color(0.1, 0.08, 0.08)), Vector3.ZERO, parent)
 	cyl(pos, 0.15, 0.15, 0.4, lantern_mat, 8, parent)
+	halo(pos, 1.1, parent)
 	cyl(pos + Vector3(0, 0.22, 0), 0.1, 0.1, 0.05, Mat.col(Color(0.1, 0.08, 0.08)), 8, parent)
 	cyl(pos - Vector3(0, 0.22, 0), 0.1, 0.1, 0.05, Mat.col(Color(0.1, 0.08, 0.08)), 8, parent)
 	var l := OmniLight3D.new()
@@ -285,6 +382,7 @@ func _stone_lantern(pos: Vector3) -> void:
 	box(pos + Vector3(0, 0.95, 0), Vector3(0.5, 0.12, 0.5), stone)
 	box(pos + Vector3(0, 1.15, 0), Vector3(0.38, 0.3, 0.38), stone)
 	box(pos + Vector3(0, 1.15, 0.0), Vector3(0.2, 0.18, 0.4), lantern_mat)
+	halo(pos + Vector3(0, 1.15, 0.25), 0.8)
 	cyl(pos + Vector3(0, 1.43, 0), 0.05, 0.42, 0.26, stone, 6)
 	var l := OmniLight3D.new()
 	l.position = pos + Vector3(0, 1.15, 0.3)
@@ -368,7 +466,23 @@ func _camp() -> void:
 	campfire = Campfire.new()
 	campfire.position = fire
 	add_child(campfire)
+	fires.append(campfire)
 	solid(fire, Vector2(1.2, 1.2))
+	# kagaribi: iron fire baskets on tripods flanking the tents
+	for bp in [Vector3(15.6, 0, -3.6), Vector3(22.6, 0, -0.4)]:
+		var iron := Mat.col(Color(0.12, 0.11, 0.12), 0.6)
+		for k in 3:
+			var a := TAU * k / 3.0
+			box(bp + Vector3(cos(a) * 0.18, 0.6, sin(a) * 0.18), Vector3(0.05, 1.25, 0.05), iron,
+				Vector3(sin(a) * 9.0, 0, -cos(a) * 9.0))
+		cyl(bp + Vector3(0, 1.28, 0), 0.26, 0.16, 0.22, iron, 8)
+		var b := Campfire.new()
+		b.scale_factor = 0.6
+		b.light_range = 4.5
+		b.position = bp + Vector3(0, 1.32, 0)
+		add_child(b)
+		fires.append(b)
+		solid(bp, Vector2(0.5, 0.5))
 	# crates and a weapon rack
 	for p in [Vector3(20.2, 0, 1.9), Vector3(20.5, 0.5, 2.0)]:
 		box(p + Vector3(0, 0.25, 0), Vector3(0.5, 0.5, 0.5), Mat.tex("wood"))

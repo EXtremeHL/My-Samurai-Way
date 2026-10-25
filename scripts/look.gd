@@ -4,8 +4,10 @@ class_name Look
 ## sky, fog, bloom and depth of field.
 
 const VARIANTS := ["dourado", "neblina", "noite"]
-const COMPAT_EXPOSURE := {"dourado": 0.78, "neblina": 0.8, "noite": 1.0}
+const COMPAT_EXPOSURE := {"dourado": 0.78, "neblina": 0.69, "noite": 1.07}
 const COMPAT_BRIGHTNESS := {"dourado": 0.86, "neblina": 0.88, "noite": 1.0}
+## Compatibility has no volumetric fog: thicken the plain fog to keep the haze
+const COMPAT_FOG := {"dourado": 1.0, "neblina": 2.2, "noite": 2.6}
 const COMPAT_SATURATION := {"dourado": 0.92, "neblina": 0.85, "noite": 0.85}
 
 
@@ -143,8 +145,7 @@ static func apply(variant: String, env: Environment, sun: DirectionalLight3D, vi
 		l.visible = lantern > 0.0
 		l.light_volumetric_fog_energy = 2.0
 	village.lantern_mat.emission_energy_multiplier = lantern_emit
-	if village.campfire:
-		village.campfire.base_energy = 2.6 if variant == "noite" else 1.6
+	village.set_night(1.0 if variant == "noite" else 0.0)
 	village.petals.emitting = petals
 	village.petals.visible = petals
 	village.fireflies.emitting = flies
@@ -159,3 +160,4 @@ static func apply(variant: String, env: Environment, sun: DirectionalLight3D, vi
 		env.tonemap_exposure = COMPAT_EXPOSURE.get(variant, 1.0)
 		env.adjustment_saturation *= COMPAT_SATURATION.get(variant, 1.0)
 		env.adjustment_brightness *= COMPAT_BRIGHTNESS.get(variant, 1.0)
+		env.fog_density *= COMPAT_FOG.get(variant, 1.0)

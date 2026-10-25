@@ -80,6 +80,6 @@ WASD/setas para andar · Shift para correr · E/Espaço para falar e confirmar �
 - **Genre:** Role Playing
 - **Tags:** samurai, hd-2d, pixel-art, turn-based, multiple-endings, choices-matter, japan, story-rich, singleplayer, godot
 - **Cover image:** `cover_630x500.png`
-- **Screenshots (in order):** `screenshot_1.png` … `screenshot_9.png` (9 = title screen)
+- **Screenshots (in order):** `screenshot_1.png` … `screenshot_10.png` (9 = title screen, 10 = the village bridge at night)
 - **Optional banner / header:** `banner_1920x1080.png`
 - **Updating:** delete the old screenshots on the page before uploading these (they show the old blue UI).

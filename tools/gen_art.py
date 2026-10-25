@@ -572,6 +572,18 @@ def fx_slash_strip(kind: str, frames: int = 5, size: int = 72) -> Image.Image:
     return Image.fromarray(sheet, "RGBA")
 
 
+def fx_halo(size: int = 64) -> Image.Image:
+    """Soft radial glow for additive lantern halos (smooth on purpose: it is
+    light, not an object, so it is the one texture drawn with filtering)."""
+    y, x = np.mgrid[0:size, 0:size] + 0.5
+    r = np.hypot(x - size / 2, y - size / 2) / (size / 2)
+    a = np.clip(1 - r, 0, 1) ** 2.2
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+    arr[..., :3] = 255
+    arr[..., 3] = (a * 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGBA")
+
+
 def fx_spark() -> Image.Image:
     """Tiny 4x4 spark (white core) for particle bursts."""
     arr = np.zeros((4, 4, 4), dtype=np.uint8)
@@ -1206,6 +1218,7 @@ def main():
     for kind in SLASH_STYLES:
         fx_slash_strip(kind).save(os.path.join(SPR, f"fx_slash_{kind}.png"))
     fx_spark().save(os.path.join(SPR, "fx_spark.png"))
+    fx_halo().save(os.path.join(SPR, "fx_halo.png"))
     ui_dir = os.path.join(os.path.dirname(SPR), "ui")
     os.makedirs(ui_dir, exist_ok=True)
     ui_washi().save(os.path.join(ui_dir, "washi.png"))

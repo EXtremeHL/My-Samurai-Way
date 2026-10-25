@@ -91,7 +91,7 @@ func _ready() -> void:
 	add_child(pause_menu)
 
 	var args := OS.get_cmdline_user_args()
-	if args.has("--playthrough") or args.has("--shots") or args.has("--promo") or args.has("--duelfx"):
+	if args.has("--playthrough") or args.has("--shots") or args.has("--promo") or args.has("--duelfx") or args.has("--night"):
 		Endings.save_path = "user://finais_teste.cfg"
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(Endings.save_path))
 		SaveGame.path = "user://partida_teste.cfg"
@@ -108,6 +108,10 @@ func _ready() -> void:
 	i = args.find("--shots")
 	if i >= 0 and i + 1 < args.size():
 		_shots(args[i + 1])
+		return
+	i = args.find("--night")
+	if i >= 0 and i + 1 < args.size():
+		_night(args[i + 1])
 		return
 	i = args.find("--duelfx")
 	if i >= 0 and i + 1 < args.size():
@@ -757,4 +761,20 @@ func _duelfx(dir: String) -> void:
 		await get_tree().create_timer(0.06, true, false, true).timeout
 		_save_shot(dir, "ko_%02d.png" % f)
 	print("fx fired: ", stage.fx.fired if is_instance_valid(stage.fx) else "(freed)")
+	get_tree().quit(0)
+
+
+## --night <dir>: the village after dark from four viewpoints (look checks).
+func _night(dir: String) -> void:
+	hud.visible = false
+	_saved.visible = false
+	_goto(1, "noite")
+	player.set_physics_process(false)
+	for v in [["rua", Vector3(-2.0, 0, 0.6)], ["casa_de_cha", Vector3(-8.0, 0, 0.6)],
+			["ponte", Vector3(11.4, 0, 0.3)], ["acampamento", Vector3(17.0, 0, 0.6)]]:
+		player.position = v[1]
+		player.face_dir(Vector3.FORWARD)
+		snap_camera()
+		await _wait(45)
+		_save_shot(dir, "night_%s.png" % v[0])
 	get_tree().quit(0)

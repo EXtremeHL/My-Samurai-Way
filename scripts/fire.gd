@@ -8,6 +8,8 @@ const SHADER := preload("res://shaders/fire.gdshader")
 
 var light: OmniLight3D
 var base_energy := 1.8
+var scale_factor := 1.0
+var light_range := 6.0
 var _t := 0.0
 
 
@@ -15,7 +17,7 @@ func _ready() -> void:
 	for k in 2:                         # two cards, offset in time, for a fuller fire
 		var card := MeshInstance3D.new()
 		var q := QuadMesh.new()
-		q.size = Vector2(24, 34) * PixelSprite.PIXEL * (1.0 - 0.25 * k)
+		q.size = Vector2(24, 34) * PixelSprite.PIXEL * (1.0 - 0.25 * k) * scale_factor
 		q.center_offset = Vector3(0, q.size.y * 0.5, 0)
 		card.mesh = q
 		var m := ShaderMaterial.new()
@@ -25,14 +27,14 @@ func _ready() -> void:
 		m.set_shader_parameter("fps", 10.0 + 2.0 * k)
 		card.material_override = m
 		card.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		card.position = Vector3(0.12 * (k * 2 - 1), 0.12, 0.05 * k)
+		card.position = Vector3(0.12 * (k * 2 - 1), 0.12, 0.05 * k) * scale_factor
 		add_child(card)
 
 	var embers := CPUParticles3D.new()
 	embers.amount = 14
 	embers.lifetime = 1.8
 	embers.preprocess = 2.0
-	embers.position = Vector3(0, 0.5, 0)
+	embers.position = Vector3(0, 0.5, 0) * scale_factor
 	embers.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	embers.emission_sphere_radius = 0.18
 	embers.direction = Vector3.UP
@@ -60,9 +62,9 @@ func _ready() -> void:
 	add_child(embers)
 
 	light = OmniLight3D.new()
-	light.position = Vector3(0, 0.8, 0)
+	light.position = Vector3(0, 0.8, 0) * scale_factor
 	light.light_color = Color(1.0, 0.6, 0.3)
-	light.omni_range = 6.0
+	light.omni_range = light_range
 	light.light_energy = base_energy
 	add_child(light)
 
