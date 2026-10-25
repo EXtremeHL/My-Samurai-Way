@@ -422,7 +422,10 @@ def _build_side(s: Sprite, a, step, y0, arm=True, waist_hilt=True, kneel=False):
                 s.line("weave", [(16, 2 + y0), (6 + i * 7, 10 + y0)], flat=True)
 
 
-COMBAT_POSES = ("ready", "raise", "slash", "guard", "hurt", "down")
+# order matters: the game indexes frames by this list (Actor.POSES); new poses
+# are appended so old frame numbers never move
+COMBAT_POSES = ("ready", "raise", "slash", "guard", "hurt", "down",
+                "windup", "swing", "cock", "thrust", "recover", "breathe", "fall")
 COMBAT_W = 64
 
 
@@ -472,27 +475,48 @@ def build_combat(arch: str, pose: str) -> Image.Image:
         s.region("hat", a["hat"])
     if a.get("headband"):
         s.region("band", a["headband"])
-    y0 = 7 if pose == "down" else 0
-    _build_side(s, a, 0, y0, arm=False, waist_hilt=False, kneel=(pose == "down"))
+    # body: kneeling drops the whole figure, lunges widen the stance
+    y0 = {"down": 7, "fall": 4, "breathe": 1}.get(pose, 0)
+    step = {"slash": 2, "swing": 2, "thrust": 2, "recover": 1, "cock": -1}.get(pose, 0)
+    _build_side(s, a, step, y0, arm=False, waist_hilt=False, kneel=(pose in ("down", "fall")))
     sh = (16, 21)
     if pose == "ready":       # chudan: blade forward and up, aimed at the throat
         _arm_and_blade(s, sh, (23, 29), (38, 16))
+    elif pose == "breathe":   # idle in-between: shoulders drop, tip sinks a little
+        _arm_and_blade(s, sh, (23, 29), (38, 18), y0=y0)
+    elif pose == "windup":    # rising from chudan towards jodan
+        _arm_and_blade(s, sh, (22, 16), (24, 0))
     elif pose == "raise":     # jodan: hands over the head, blade back
         _arm_and_blade(s, sh, (19, 7), (2, 10))
+    elif pose == "swing":     # mid-cut: the blade comes over, hands still high
+        _arm_and_blade(s, sh, (26, 15), (44, 4))
     elif pose == "slash":     # follow-through: arms extended, blade level
         _arm_and_blade(s, sh, (28, 28), (47, 31))
+    elif pose == "recover":   # after the cut: blade low, coming back up
+        _arm_and_blade(s, sh, (25, 31), (41, 39))
+    elif pose == "cock":      # thrust wind-up: hands pulled back to the hip, tip level
+        _arm_and_blade(s, sh, (17, 28), (33, 24))
+    elif pose == "thrust":    # tsuki: arms and blade straight out
+        _arm_and_blade(s, sh, (31, 24), (54, 22))
     elif pose == "guard":     # vertical guard in front of the body
         _arm_and_blade(s, sh, (24, 27), (27, 6))
     elif pose == "hurt":      # recoil: blade drops
         _arm_and_blade(s, sh, (22, 31), (34, 41))
+    elif pose == "fall":      # knees buckling, blade swinging down
+        _arm_and_blade(s, sh, (22, 31), (36, 41), y0=y0)
     elif pose == "down":      # kneeling, blade planted
         _arm_and_blade(s, sh, (23, 30), (31, 40), y0=y0)
     img = s.render()
-    if pose == "hurt":        # lean the upper body back
+    # lean the upper body: back when hit, forward into the cut
+    lean = {"hurt": -3, "fall": -2, "swing": 2, "slash": 2, "thrust": 3, "cock": -1}.get(pose, 0)
+    if lean:
         arr = np.array(img)
         top = arr[:30].copy()
         arr[:30] = 0
-        arr[:30, :-3] = top[:, 3:]
+        if lean < 0:
+            arr[:30, :lean] = top[:, -lean:]
+        else:
+            arr[:30, lean:] = top[:, :-lean]
         img = Image.fromarray(arr, "RGBA")
     return img
 

@@ -28,6 +28,7 @@ var _cam_from: Transform3D
 var _attrs_explore: CameraAttributes
 var _attrs_duel: CameraAttributesPractical
 var _walking: Array = []
+var _petals_were := false
 
 
 func _init(m: Node) -> void:
@@ -73,6 +74,9 @@ func start(id: String, npc: Actor, spot: Vector3, hero_fighter: Fighter = null, 
 	foe.enter_combat(data.sheet, true)
 
 	# camera into duel framing
+	# petals drifting past the close duel camera turn into huge blurred squares
+	_petals_were = main.village.petals.visible
+	main.village.petals.visible = false
 	var cam: Camera3D = main.cam
 	_cam_from = cam.global_transform
 	_attrs_explore = cam.attributes
@@ -115,6 +119,7 @@ func _finish() -> void:
 	var back := Transform3D(_cam_from.basis, main._focus_point() + main.CAM_OFFSET)
 	await _tween_cam(cam.global_transform, back, 0.6)
 	cam.attributes = _attrs_explore
+	main.village.petals.visible = _petals_were
 	hero.exit_combat()
 	foe.exit_combat()
 	hero.face_dir(Vector3.RIGHT)
@@ -295,10 +300,13 @@ func _play_events(ev: Array) -> void:
 				# attacker swings, defender turns it and cuts back
 				var att := _actor(e.who)
 				var dfn := _actor(e.by)
-				att.pose("raise")
+				att.pose("windup")
 				dfn.pose("guard")
-				await _wait(0.25)
+				await _wait(0.1)
+				att.pose("raise")
+				await _wait(0.2)
 				GameAudio.sfx("slash_heavy", -3.0, 0.05)
+				att.pose("swing")
 				await _lunge(att, 0.55)
 				# steel on steel: sparks between the blades, a frozen beat, then the cut back
 				GameAudio.sfx("clash", -1.0, 0.04)
@@ -307,6 +315,8 @@ func _play_events(ev: Array) -> void:
 				fx.shake(0.12, 0.2)
 				await fx.hitstop(0.14)
 				ui.float_text("Desviado!", _screen(dfn, 2.0), Color(0.7, 0.85, 1.0), 26)
+				dfn.pose("swing")
+				await _wait(0.05)
 				dfn.pose("slash")
 				fx.slash(att, Duel.Act.HEAVY, e.by == "foe")
 				fx.impact(att, true)
@@ -317,7 +327,10 @@ func _play_events(ev: Array) -> void:
 				fx.shake(0.22)
 				ui.refresh(duel)
 				await _wait(0.5)
+				dfn.pose("recover")
 				await _return(att)
+				att.pose("ready")
+				dfn.pose("ready")
 			"parry_wasted":
 				ui.float_text("...ninguém atacou.", _screen(_actor(e.who), 1.7), Color(0.8, 0.8, 0.85), 20)
 				await _wait(0.5)
@@ -348,6 +361,8 @@ func _play_events(ev: Array) -> void:
 			"ko":
 				GameAudio.sfx("ko", 0.0)
 				var a := _actor(e.who)
+				a.pose("fall")
+				await _wait(0.16)
 				a.pose("down")
 				a.set_flash(0.5)
 				create_tween().tween_method(a.set_flash, 0.5, 0.0, 0.3)
@@ -363,21 +378,33 @@ func _play_events(ev: Array) -> void:
 func _strike(who: String, kind: int, hits: bool, e := {}) -> void:
 	var att := _actor(who)
 	var tgt := _actor(_other(who))
-	att.pose("raise")
-	await _wait(0.28 if kind == Duel.Act.LIGHT else 0.45)
-	if kind == Duel.Act.TECH:
-		GameAudio.sfx("tech", -2.0)
-		att.set_flash(0.6)
-		fx.sparks(att.global_position + Vector3(0, 1.0, 0.2), 18, false)   # ki gathering on the blade
-		ui.float_text(Duel.TECH_NAME, _screen(att, 2.2), Color(0.75, 0.9, 1.0), 26)
-		await _wait(0.35)
-		att.set_flash(0.0)
-	if kind != Duel.Act.TECH:
-		GameAudio.sfx("slash_light" if kind == Duel.Act.LIGHT else "slash_heavy", -3.0, 0.06)
-	if kind != Duel.Act.LIGHT:
+	if kind == Duel.Act.LIGHT:
+		# tsuki: pull the hands back to the hip, then drive straight in
+		att.pose("cock")
+		await _wait(0.22)
+		GameAudio.sfx("slash_light", -3.0, 0.06)
+		att.pose("thrust")
+		await _lunge(att, 0.85)
+	else:
+		# overhead cut: rise through windup into jodan, hold, step in and cut
+		att.pose("windup")
+		await _wait(0.1)
+		att.pose("raise")
+		await _wait(0.3)
+		if kind == Duel.Act.TECH:
+			GameAudio.sfx("tech", -2.0)
+			att.set_flash(0.6)
+			fx.sparks(att.global_position + Vector3(0, 1.0, 0.2), 18, false)   # ki gathering on the blade
+			ui.float_text(Duel.TECH_NAME, _screen(att, 2.2), Color(0.75, 0.9, 1.0), 26)
+			await _wait(0.35)
+			att.set_flash(0.0)
+		else:
+			GameAudio.sfx("slash_heavy", -3.0, 0.06)
 		fx.dust(att.global_position)                   # the push-off kicks up dirt
-	await _lunge(att, 0.85 if kind == Duel.Act.LIGHT else 1.0)
-	att.pose("slash")
+		await _anticipate(att)
+		att.pose("swing")
+		await _lunge(att, 1.0)
+		att.pose("slash")
 	fx.slash(tgt, kind, who == "foe")
 	if hits:
 		GameAudio.sfx("hit" if kind == Duel.Act.LIGHT else "hit_heavy", -2.0, 0.06)
@@ -386,6 +413,7 @@ func _strike(who: String, kind: int, hits: bool, e := {}) -> void:
 		var crit: bool = e.get("crit", false)
 		fx.impact(tgt, kind != Duel.Act.LIGHT or crit)
 		if guarded:
+			tgt.pose("guard")
 			fx.sparks(tgt.global_position + Vector3(0, 1.0, 0.3), 14, false)
 		match kind:
 			Duel.Act.LIGHT:
@@ -406,15 +434,26 @@ func _strike(who: String, kind: int, hits: bool, e := {}) -> void:
 	else:
 		GameAudio.sfx("miss", -4.0, 0.08)
 		var side := 1.0 if who == "hero" else -1.0
+		tgt.pose("guard")
 		var t := create_tween()
 		t.tween_property(tgt, "position:x", tgt.position.x + 0.35 * side, 0.1)
 		t.tween_property(tgt, "position:x", tgt.position.x, 0.25)
-	await _wait(0.4)
+	await _wait(0.3)
+
+
+## A small step back before a big blow, so the lunge reads.
+func _anticipate(a: Actor) -> void:
+	var dir := -1.0 if a == hero else 1.0
+	var t := create_tween()
+	t.tween_property(a, "position:x", a.position.x + 0.12 * dir, 0.08 * main.anim_speed) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await t.finished
 
 
 func _recover(who: String) -> void:
 	var att := _actor(who)
 	var tgt := _actor(_other(who))
+	att.pose("recover")
 	await _return(att)
 	att.pose("ready")
 	if _fighter(_other(who)).alive():
@@ -490,6 +529,20 @@ func _walk_to(moves: Array) -> void:
 		m[0].animate(false, 0.0)
 
 
+var _breath_t := 0.0
+
+
 func _process(delta: float) -> void:
 	for m in _walking:
 		m[0].animate(true, delta)
+	if not active or hero == null or foe == null:
+		return
+	# idle breathing: fighters standing in "ready" sink and rise, out of step
+	_breath_t += delta
+	for a in [hero, foe]:
+		if a.current_pose in ["ready", "breathe"] and a.in_combat():
+			var phase := 0.0 if a == hero else 0.45
+			var down := fmod(_breath_t * 0.85 + phase, 1.0) > 0.5
+			var want := "breathe" if down else "ready"
+			if a.current_pose != want:
+				a.pose(want)

@@ -69,7 +69,10 @@ func animate(moving: bool, delta: float, speed_scale := 1.0) -> void:
 # ---------------------------------------------------------------------------
 # combat presentation: a second, wider sheet with sword poses
 # ---------------------------------------------------------------------------
-const POSES := ["ready", "raise", "slash", "guard", "hurt", "down"]
+## Must match COMBAT_POSES in tools/gen_art.py (frame order of combat_*.png).
+const POSES := ["ready", "raise", "slash", "guard", "hurt", "down",
+	"windup", "swing", "cock", "thrust", "recover", "breathe", "fall"]
+var current_pose := ""
 var combat_sprite: PixelSprite
 
 
@@ -95,6 +98,7 @@ func in_combat() -> bool:
 
 
 func pose(p: String) -> void:
+	current_pose = p
 	if combat_sprite:
 		combat_sprite.set_frame(POSES.find(p), 0)
 
