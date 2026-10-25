@@ -335,6 +335,38 @@ func run(m: Node) -> void:
 	check(st.clock_text() == "Dia 2 · Tarde", "spending the last moment rolls on to the afternoon")
 
 	# =====================================================================
+	# saving: automatic, and it resumes exactly here
+	# =====================================================================
+	check(SaveGame.path.ends_with("_teste.cfg"), "tests never touch the player's real save")
+	check(SaveGame.exists() and SaveGame.summary() == "Dia 2 · Tarde", "the run was saved automatically (%s)" % SaveGame.summary())
+	var saved := SaveGame.read()
+	check(saved.state.flags == st.flags and saved.state.rep == st.rep and saved.state.hero_hp == st.hero_hp,
+			"the save holds flags, reputation and wounds")
+	check((saved.pos as Vector3).distance_to(pl.position) < 0.3, "the save holds where the hero stands")
+	check(main._saved.modulate.a > 0.0, "a 'partida gravada' note flashes")
+	# the pause menu
+	var ev := InputEventAction.new()
+	ev.action = "cancel"
+	ev.pressed = true
+	get_tree().root.push_input(ev)
+	await frames(2)
+	check(main.pause_menu.is_open and get_tree().paused, "Esc opens the pause menu and pauses the game")
+	var px := pl.position
+	Input.action_press("move_right")
+	for _i in 10:
+		await get_tree().process_frame
+	Input.action_release("move_right")
+	check(pl.position.is_equal_approx(px), "nothing moves while paused")
+	main.pause_menu._activate(1)
+	check(main.pause_menu._note.text.begins_with("✓"), "'Gravar partida' saves from the menu")
+	main.pause_menu._activate(0)
+	await frames(2)
+	check(not main.pause_menu.is_open and not get_tree().paused, "'Continuar' closes the menu")
+	# a fresh state loaded from the save equals the live one
+	var copy := GameState.new()
+	check(copy.from_dict(SaveGame.read().state) and copy.to_dict() == st.to_dict(), "loading the save restores the same state")
+
+	# =====================================================================
 	# an ending: walk out east
 	# =====================================================================
 	await teleport(Vector3(20.0, 0, 0.25))
@@ -350,6 +382,7 @@ func run(m: Node) -> void:
 	check(Endings.discovered().has(main.ended_with), "the ending is remembered between runs")
 	check(main.ending_screen and main.ending_screen._ready_for_input, "the ending card is up")
 	check(au.current_music == "ending" and au.current_amb == "" and au.played("ending_gong"), "the ending theme plays")
+	check(not SaveGame.exists(), "a finished run leaves no save to continue")
 
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit(0 if ok else 1)

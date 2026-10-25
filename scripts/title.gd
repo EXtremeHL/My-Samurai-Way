@@ -24,6 +24,7 @@ var _status: Label
 var _layer: CanvasLayer
 var _root: Control
 var _leaving := false
+var _confirm_new := false
 var _testing := false                   # keep this node alive for the self-test
 
 
@@ -33,6 +34,15 @@ func _ready() -> void:
 	if not args.is_empty() and shot < 0:
 		get_tree().change_scene_to_file.call_deferred(GAME_SCENE)
 		return
+	if shot >= 0:
+		# self-test: a throwaway save on day 2 night, which "Continuar" must load
+		SaveGame.path = "user://partida_teste_titulo.cfg"
+		Endings.save_path = "user://finais_teste.cfg"
+		var s := GameState.new()
+		s.day = 2
+		s.period_i = 2
+		s.set_flag("salvou_oyuki")
+		SaveGame.write(s, Vector3(1.5, 0, 0.6), Vector3.RIGHT)
 	_build_ui()
 	# let the title render first, then build the game under it
 	await get_tree().process_frame
@@ -67,6 +77,7 @@ func _self_test(dir: String) -> void:
 	await get_tree().create_timer(1.2).timeout
 	get_viewport().get_texture().get_image().save_png(dir.path_join("after_start.png"))
 	ok = ok and _leaving
+	p0 = gp.global_position
 	Input.action_press("move_right")
 	await get_tree().create_timer(0.6).timeout
 	Input.action_release("move_right")
@@ -74,7 +85,12 @@ func _self_test(dir: String) -> void:
 	print("check moves after start: ", moved)
 	var music: String = GameAudio.inst.current_music if GameAudio.inst else ""
 	print("check music: ", music)
-	ok = ok and moved and music != ""
+	var gs: GameState = game.get("state")
+	var resumed := gs.clock_text() == "Dia 2 · Noite" and gs.has("salvou_oyuki")
+	print("check continue loaded the save: ", resumed, " (", gs.clock_text(), ")")
+	print("check night music after continue: ", music == "town_night")
+	ok = ok and moved and resumed and music == "town_night"
+	SaveGame.erase()
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	get_tree().quit(0 if ok else 1)
 
@@ -113,7 +129,13 @@ func _build_ui() -> void:
 	_menu_box = VBoxContainer.new()
 	_menu_box.add_theme_constant_override("separation", 6)
 	col.add_child(_menu_box)
-	_items = [{"label": "Começar", "action": "start"}]
+	var saved := SaveGame.summary()
+	_items = []
+	if saved != "":
+		_items.append({"label": "Continuar — %s" % saved, "action": "continue"})
+		_items.append({"label": "Novo jogo", "action": "new"})
+	else:
+		_items.append({"label": "Começar", "action": "new"})
 	if OS.has_feature("web"):
 		_items.append({"label": "Ecrã inteiro", "action": "fullscreen"})
 	else:
@@ -158,8 +180,10 @@ func _refresh_menu() -> void:
 		var l: Label = _items[i]["node"]
 		var on := i == _sel
 		var txt: String = _items[i]["label"]
-		if _items[i]["action"] == "start" and not ready_to_play:
+		if i == 0 and not ready_to_play:
 			txt += "  (a preparar…)"
+		if _items[i]["action"] == "new" and _confirm_new:
+			txt = "Novo jogo? A partida gravada será apagada — confirma"
 		l.text = ("▶  %s  ◀" % txt) if on else txt
 		l.add_theme_color_override("font_color", GOLD if on else CREAM)
 
@@ -196,7 +220,7 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e.is_action_pressed("interact"):
 		_activate(_sel)
 	elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-		_activate(0)     # a click anywhere starts
+		_activate(0)     # a click anywhere: the first option (continue, or start)
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -215,9 +239,22 @@ func _item_input(e: InputEvent, i: int) -> void:
 
 
 func _activate(i: int) -> void:
-	match _items[i]["action"]:
-		"start":
-			start()
+	var action: String = _items[i]["action"]
+	if action != "new" and _confirm_new:
+		_confirm_new = false
+		_refresh_menu()
+	match action:
+		"continue":
+			start(true)
+		"new":
+			if SaveGame.exists() and not _confirm_new:
+				_confirm_new = true
+				_sel = i
+				GameAudio.sfx("ui_back")
+				_refresh_menu()
+				return
+			SaveGame.erase()
+			start(false)
 		"fullscreen":
 			GameAudio.sfx("ui_select")
 			var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
@@ -227,8 +264,9 @@ func _activate(i: int) -> void:
 			get_tree().quit()
 
 
-## Unpauses the game underneath and fades the title away.
-func start() -> void:
+## Unpauses the game underneath (loading the save if resuming) and fades the
+## title away.
+func start(resume := false) -> void:
 	if _leaving:
 		return
 	if not ready_to_play:
@@ -238,6 +276,8 @@ func start() -> void:
 	_leaving = true
 	GameAudio.sfx("ui_select")
 	game.process_mode = Node.PROCESS_MODE_INHERIT
+	get_tree().current_scene = game       # so later scene changes free it
+	game.begin(resume)
 	var t := create_tween()
 	t.tween_property(_root, "modulate:a", 0.0, 0.8)
 	if not _testing:

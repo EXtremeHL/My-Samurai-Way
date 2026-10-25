@@ -34,6 +34,8 @@ var _title: Label
 var hint: Label
 var _fade: ColorRect
 var audio: GameAudio
+var _saved: Label
+var pause_menu: PauseMenu
 
 
 func _ready() -> void:
@@ -84,11 +86,15 @@ func _ready() -> void:
 	stage = DuelStage.new(self)
 	add_child(stage)
 	stage.finished.connect(_on_duel_finished)
+	pause_menu = PauseMenu.new(self)
+	add_child(pause_menu)
 
 	var args := OS.get_cmdline_user_args()
 	if args.has("--playthrough") or args.has("--shots") or args.has("--promo"):
 		Endings.save_path = "user://finais_teste.cfg"
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(Endings.save_path))
+		SaveGame.path = "user://partida_teste.cfg"
+		SaveGame.erase()
 	refresh_world()
 	var i := args.find("--look")
 	if i >= 0 and i + 1 < args.size():
@@ -116,7 +122,48 @@ func _ready() -> void:
 		add_child(runner)
 		runner.run(self)
 		return
+	if get_tree().current_scene == self:
+		begin(false)                    # launched directly, without the title screen
+
+
+## Called by the title screen when the player starts: a new run or the saved one.
+func begin(resume: bool) -> void:
+	if resume:
+		load_save()
 	_show_title("My Samurai Way", "Kurogane-juku · %s" % state.clock_text())
+
+
+## Restores the saved run into this scene. Returns false if there is none.
+func load_save() -> bool:
+	var d := SaveGame.read()
+	if d.is_empty() or not state.from_dict(d.state):
+		return false
+	player.position = d.pos
+	player.face_dir(d.facing)
+	player.snap_to_ground()
+	refresh_world()
+	snap_camera()
+	return true
+
+
+## Saves when the hero is free to walk (never mid-conversation or mid-duel).
+func autosave() -> void:
+	if ended_with != "" or stage.active or dialogue.open:
+		return
+	if SaveGame.write(state, player.position, player.facing_vector()):
+		_flash_saved()
+
+
+func autosave_now() -> void:
+	if ended_with == "":
+		SaveGame.write(state, player.position, player.facing_vector())
+
+
+func _flash_saved() -> void:
+	_saved.modulate.a = 1.0
+	var t := create_tween()
+	t.tween_interval(1.2)
+	t.tween_property(_saved, "modulate:a", 0.0, 0.8)
 
 
 # ---------------------------------------------------------------------------
@@ -166,11 +213,28 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("cancel") and can_pause():
+		get_viewport().set_input_as_handled()
+		pause_menu.open()
+		return
 	if event.is_action_pressed("journal") and not dialogue.open and not stage.active and ended_with == "":
 		get_viewport().set_input_as_handled()
 		hud.toggle_journal(state)
 		player.frozen = hud.journal_open
 		GameAudio.sfx("page", -4.0, 0.05)
+
+
+## Leaves for the title screen (the run is saved first if it is still going).
+func back_to_title() -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/title.tscn")
+	if get_tree().current_scene != self:
+		queue_free()
+
+
+func can_pause() -> bool:
+	return not dialogue.open and not stage.active and ended_with == "" \
+			and not hud.journal_open and not player.frozen
 
 
 ## Jump the camera to the player without easing (teleports, tests, shots).
@@ -259,6 +323,7 @@ func spend_time(cost: int) -> void:
 		await advance_time(false)
 	else:
 		player.frozen = false
+		autosave()
 
 
 ## Next part of the day: fade, title card, new light, people move.
@@ -277,6 +342,7 @@ func advance_time(rested: bool) -> void:
 	await get_tree().create_timer(1.2 * anim_speed).timeout
 	await _fade_to(0.0, 0.8)
 	player.frozen = false
+	autosave()
 
 
 func _fade_to(a: float, secs: float) -> void:
@@ -364,6 +430,7 @@ func _wake_at_teahouse() -> void:
 	dialogue.start(StoryData.WAKE_LINES)
 	await dialogue.finished
 	player.frozen = false
+	autosave()
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +441,7 @@ func _end(id: String) -> void:
 		id = Endings.evaluate(state, id)
 	ended_with = id
 	state.ending = id
+	SaveGame.erase()                    # the run is over; endings are kept apart
 	GameAudio.music("ending", 2.0)
 	GameAudio.ambience("", 3.0)
 	GameAudio.sfx("ending_gong", -4.0)
@@ -382,7 +450,7 @@ func _end(id: String) -> void:
 	hint.text = ""
 	ending_screen = EndingScreen.new()
 	add_child(ending_screen)
-	ending_screen.restart.connect(func(): get_tree().reload_current_scene())
+	ending_screen.restart.connect(back_to_title)
 	await ending_screen.show_ending(id, state, anim_speed)
 
 
@@ -422,6 +490,21 @@ func _build_overlay() -> void:
 	hint.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.12))
 	hint.add_theme_constant_override("outline_size", 8)
 	layer.add_child(hint)
+	_saved = Label.new()
+	_saved.text = "✓ Partida gravada"
+	_saved.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_saved.offset_left = -260
+	_saved.offset_right = -24
+	_saved.offset_top = -52
+	_saved.offset_bottom = -20
+	_saved.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_saved.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_saved.add_theme_font_size_override("font_size", 18)
+	_saved.add_theme_color_override("font_color", Color(0.95, 0.85, 0.6))
+	_saved.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.12))
+	_saved.add_theme_constant_override("outline_size", 6)
+	_saved.modulate.a = 0.0
+	layer.add_child(_saved)
 	_fade = ColorRect.new()
 	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -490,6 +573,13 @@ func _shots(dir: String) -> void:
 	await _wait(10)
 	_save_shot(dir, "shot_journal.png")
 	hud.toggle_journal(state)
+	pause_menu.open()
+	await _wait(10)
+	_save_shot(dir, "shot_pause.png")
+	pause_menu.close()
+	_flash_saved()
+	await _wait(3)
+	_save_shot(dir, "shot_saved.png")
 	# 2. night: the Corvo thug harassing Oyuki
 	_goto(1, "noite")
 	player.position = Vector3(-6.4, 0, 0.4)

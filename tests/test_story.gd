@@ -22,6 +22,7 @@ func _init() -> void:
 	test_everyone_has_something_to_say()
 	test_schedules()
 	test_routes_to_every_ending()
+	test_save_round_trip()
 	print("RESULT: ", "PASS" if ok else "FAIL", " (%d checks)" % count)
 	quit(0 if ok else 1)
 
@@ -367,3 +368,39 @@ func test_routes_to_every_ending() -> void:
 		if not reached.has(e):
 			missing.append(e)
 	check(missing.is_empty(), "all %d endings are reachable %s" % [Endings.ALL.size(), missing])
+
+
+func test_save_round_trip() -> void:
+	SaveGame.path = "user://partida_teste_unit.cfg"
+	SaveGame.erase()
+	check(not SaveGame.exists() and SaveGame.summary() == "", "no save: nothing to continue")
+	var s := GameState.new()
+	to(s, 2, "noite")
+	s.units = 5
+	s.apply("flag:salvou_oyuki;rep:vila:+20;rep:corvo:-35;mark:visto")
+	s.hero_hp = 61
+	check(SaveGame.write(s, Vector3(3.5, 0, -1.25), Vector3.LEFT), "the run saves")
+	check(SaveGame.summary() == "Dia 2 · Noite", "title shows what is saved (%s)" % SaveGame.summary())
+	var d := SaveGame.read()
+	var r := GameState.new()
+	check(r.from_dict(d.state) and r.to_dict() == s.to_dict(), "loaded state equals the saved one")
+	check(r.has("salvou_oyuki") and r.rep.corvo == -35 and r.hero_hp == 61 and r.units == 5, "flags, rep, wounds, time")
+	check((d.pos as Vector3).is_equal_approx(Vector3(3.5, 0, -1.25)) and d.facing == Vector3.LEFT, "position and facing")
+	var bad := s.to_dict()
+	bad.v = 999
+	var r2 := GameState.new()
+	check(not r2.from_dict(bad) and r2.day == 1, "a save from another version is refused, state untouched")
+	var broken := {"v": GameState.SAVE_VERSION, "day": 2}
+	check(not GameState.new().from_dict(broken), "an incomplete save is refused")
+	var wild := s.to_dict()
+	wild.day = 40
+	wild.hero_hp = 9999
+	var r3 := GameState.new()
+	r3.from_dict(wild)
+	check(r3.day == GameState.LAST_DAY and r3.hero_hp == r3.hero_max_hp(), "out-of-range values are clamped")
+	var f := FileAccess.open(SaveGame.path, FileAccess.WRITE)
+	f.store_string("isto não é um ficheiro de gravação")
+	f.close()
+	check(SaveGame.read().is_empty() and SaveGame.summary() == "", "a corrupt file reads as no save")
+	SaveGame.erase()
+	check(not SaveGame.exists(), "erase removes it")

@@ -46,6 +46,16 @@ func face_dir(d: Vector3) -> void:
 	_apply_frame()
 
 
+## The direction the actor faces, as a world vector (inverse of face_dir).
+func facing_vector() -> Vector3:
+	match facing:
+		"side":
+			return Vector3.LEFT if flip else Vector3.RIGHT
+		"up":
+			return Vector3.FORWARD
+	return Vector3.BACK
+
+
 func animate(moving: bool, delta: float, speed_scale := 1.0) -> void:
 	if moving:
 		_anim_t += delta * WALK_FPS * speed_scale

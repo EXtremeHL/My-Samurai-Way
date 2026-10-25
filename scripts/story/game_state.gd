@@ -11,6 +11,7 @@ const LAST_DAY := 3
 const FACTIONS := ["corvo", "magistrado", "vila"]
 const FACTION_NAMES := {"corvo": "Bando do Corvo", "magistrado": "Magistrado", "vila": "Gente da vila"}
 
+const SAVE_VERSION := 1
 const COST_TALK := 1
 const COST_DUEL := 3
 
@@ -22,6 +23,33 @@ var flags := {}
 var marks := {}              # name -> absolute period when it was set
 var hero_hp := 110
 var ending := ""
+
+
+## Everything needed to resume a run (plain types only, safe for var_to_str).
+func to_dict() -> Dictionary:
+	return {"v": SAVE_VERSION, "day": day, "period_i": period_i, "units": units,
+		"rep": rep.duplicate(), "flags": flags.duplicate(), "marks": marks.duplicate(),
+		"hero_hp": hero_hp}
+
+
+## Restores a state saved by to_dict(). Returns false (state untouched) if the
+## data is not a save this version understands.
+func from_dict(d: Dictionary) -> bool:
+	if d.get("v", -1) != SAVE_VERSION:
+		return false
+	for k in ["day", "period_i", "units", "rep", "flags", "marks", "hero_hp"]:
+		if not d.has(k):
+			return false
+	day = clampi(int(d.day), 1, LAST_DAY)
+	period_i = clampi(int(d.period_i), 0, PERIODS.size() - 1)
+	units = clampi(int(d.units), 0, UNITS_PER_PERIOD)
+	for f in FACTIONS:
+		rep[f] = clampi(int(d.rep.get(f, 0)), -100, 100)
+	flags = (d.flags as Dictionary).duplicate()
+	marks = (d.marks as Dictionary).duplicate()
+	hero_hp = clampi(int(d.hero_hp), 1, hero_max_hp())
+	ending = ""
+	return true
 
 
 func period() -> String:
