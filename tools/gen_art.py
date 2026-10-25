@@ -24,6 +24,9 @@ SPR = os.path.join(ROOT, "assets", "sprites")
 TEX = os.path.join(ROOT, "assets", "textures")
 
 
+TAU_F = 2 * math.pi
+
+
 def hexc(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
@@ -536,6 +539,41 @@ def fx_hit() -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
+def fx_fire(frames: int = 6, w: int = 24, h: int = 34) -> Image.Image:
+    """Campfire flame strip: `frames` columns, a looping flicker.
+
+    A teardrop silhouette whose edge wobbles with two travelling sine waves,
+    banded into a 5-colour palette (ember red -> white core) so it reads as
+    pixel art, not a gradient. Tongues break off near the top and drift up."""
+    pal = [(120, 24, 18), (196, 52, 22), (240, 110, 30), (255, 182, 60), (255, 236, 170)]
+    sheet = np.zeros((h, w * frames, 4), dtype=np.uint8)
+    rng = np.random.default_rng(7)
+    for f in range(frames):
+        ph = TAU_F * f / frames
+        for y in range(h):
+            v = y / (h - 1)                           # image y grows down: 1 at the base, 0 at the tip
+            base_half = 9.0 * (v ** 0.8) * (1 - 0.35 * max(0.0, v - 0.8) / 0.2)
+            sway = 1.6 * (1 - v) * math.sin(ph + y * 0.38) + 0.6 * math.sin(2 * ph + y * 0.9)
+            for x in range(w):
+                dx = x + 0.5 - (w / 2 + sway)
+                edge = base_half + 1.1 * math.sin(ph * 2 + y * 0.7 + (1 if dx > 0 else 0) * 2.1)
+                if abs(dx) > edge or edge <= 0.3:
+                    continue
+                heat = (1 - abs(dx) / max(edge, 0.5)) * 0.65 + v * 0.55
+                k = int(min(4, max(0, heat * 4.2 - 0.6)))
+                sheet[y, f * w + x, :3] = pal[k]
+                sheet[y, f * w + x, 3] = 255
+        # a detached tongue drifting up through the loop
+        ty = int((h * 0.3) - (f / frames) * h * 0.28)
+        tx = int(w / 2 + 2 * math.sin(ph))
+        for yy in range(max(0, ty - 2), max(0, ty + 1)):
+            for xx in (tx, tx + 1):
+                if 0 <= yy < h and sheet[yy, f * w + xx, 3] == 0:
+                    sheet[yy, f * w + xx, :3] = pal[2]
+                    sheet[yy, f * w + xx, 3] = 255
+    return Image.fromarray(sheet, "RGBA")
+
+
 def character_sheet(arch: str) -> Image.Image:
     """Rows: down, up, side. Columns: idle, walk1..4."""
     sheet = Image.new("RGBA", (CW * 5, CH * 3), (0, 0, 0, 0))
@@ -834,6 +872,7 @@ def main():
             combat_sheet(arch).save(os.path.join(SPR, f"combat_{arch}.png"))
     fx_slash().save(os.path.join(SPR, "fx_slash.png"))
     fx_hit().save(os.path.join(SPR, "fx_hit.png"))
+    fx_fire().save(os.path.join(SPR, "fx_fire.png"))
     sakura().save(os.path.join(SPR, "tree_sakura.png"))
     pine().save(os.path.join(SPR, "tree_pine.png"))
     maple().save(os.path.join(SPR, "tree_maple.png"))

@@ -91,20 +91,20 @@ static func apply(variant: String, env: Environment, sun: DirectionalLight3D, vi
 			env.ambient_light_color = Color(0.6, 0.66, 0.75)
 			env.ambient_light_energy = 0.9
 			env.fog_light_color = Color(0.78, 0.82, 0.88)
-			env.fog_density = 0.006
+			env.fog_density = 0.0035
 			env.fog_sun_scatter = 0.4
-			env.fog_height = 0.6
-			env.fog_height_density = 0.35
+			env.fog_height = 0.4
+			env.fog_height_density = 0.22
 			env.volumetric_fog_enabled = true
-			env.volumetric_fog_density = 0.012
+			env.volumetric_fog_density = 0.0065
 			env.volumetric_fog_albedo = Color(0.85, 0.88, 0.95)
 			env.volumetric_fog_length = 40.0
 			env.glow_intensity = 0.5
 			env.glow_bloom = 0.12
 			env.glow_hdr_threshold = 1.0
-			env.adjustment_saturation = 0.88
-			env.adjustment_contrast = 0.98
-			env.adjustment_brightness = 1.03
+			env.adjustment_saturation = 0.95
+			env.adjustment_contrast = 1.06
+			env.adjustment_brightness = 1.0
 			lantern = 0.0
 			lantern_emit = 0.15
 		"noite":
@@ -143,6 +143,8 @@ static func apply(variant: String, env: Environment, sun: DirectionalLight3D, vi
 		l.visible = lantern > 0.0
 		l.light_volumetric_fog_energy = 2.0
 	village.lantern_mat.emission_energy_multiplier = lantern_emit
+	if village.campfire:
+		village.campfire.base_energy = 2.6 if variant == "noite" else 1.6
 	village.petals.emitting = petals
 	village.petals.visible = petals
 	village.fireflies.emitting = flies

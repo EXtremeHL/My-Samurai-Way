@@ -9,6 +9,7 @@ var lantern_mat: StandardMaterial3D
 var water_mat: StandardMaterial3D
 var petals: CPUParticles3D
 var fireflies: CPUParticles3D
+var campfire: Campfire
 
 
 func build() -> void:
@@ -357,21 +358,16 @@ func _camp() -> void:
 	add_child(flag)
 	solid(pole, Vector2(0.3, 0.3))
 	# campfire: stone ring, logs, flame, warm light
-	var fire := Vector3(17.6, 0, 3.0)
+	var fire := Vector3(14.8, 0, 3.0)      # off the duel camera's line to Kuroda's spot
 	var stone := Mat.tex("stone")
 	for k in 8:
 		var a := TAU * k / 8.0
 		box(fire + Vector3(cos(a) * 0.55, 0.1, sin(a) * 0.55), Vector3(0.25, 0.2, 0.22), stone, Vector3(0, -rad_to_deg(a), 0))
 	for k in 3:
 		box(fire + Vector3(0, 0.12, 0), Vector3(0.9, 0.1, 0.1), Mat.tex("wood"), Vector3(0, k * 60.0, 0))
-	var flame := cyl(fire + Vector3(0, 0.38, 0), 0.0, 0.26, 0.6, Mat.glow(Color(1.0, 0.55, 0.15), 3.0), 6)
-	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var fl := OmniLight3D.new()
-	fl.position = fire + Vector3(0, 0.8, 0)
-	fl.light_color = Color(1.0, 0.6, 0.3)
-	fl.omni_range = 6.0
-	add_child(fl)
-	lantern_lights.append(fl)
+	campfire = Campfire.new()
+	campfire.position = fire
+	add_child(campfire)
 	solid(fire, Vector2(1.2, 1.2))
 	# crates and a weapon rack
 	for p in [Vector3(20.2, 0, 1.9), Vector3(20.5, 0.5, 2.0)]:
@@ -415,7 +411,7 @@ func _foliage() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 99
 	for p in [Vector3(-5.2, 0, -3.4), Vector3(4.6, 0, -3.2), Vector3(-1.0, 0, -3.3), Vector3(6.5, 0, 2.9),
-			Vector3(-7.0, 0, 3.4), Vector3(14.6, 0, 3.4), Vector3(-2.5, 0, 4.2), Vector3(9.6, 0, 3.6)]:
+			Vector3(-7.0, 0, 3.4), Vector3(21.3, 0, 3.5), Vector3(-2.5, 0, 4.2), Vector3(9.6, 0, 3.6)]:
 		var b := sprite("res://assets/sprites/bush.png", p, rng.randf_range(0.9, 1.25))
 		b.set_flip(rng.randf() < 0.5)
 
