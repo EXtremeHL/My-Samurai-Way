@@ -90,7 +90,7 @@ func _ready() -> void:
 	add_child(pause_menu)
 
 	var args := OS.get_cmdline_user_args()
-	if args.has("--playthrough") or args.has("--shots") or args.has("--promo"):
+	if args.has("--playthrough") or args.has("--shots") or args.has("--promo") or args.has("--duelfx"):
 		Endings.save_path = "user://finais_teste.cfg"
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(Endings.save_path))
 		SaveGame.path = "user://partida_teste.cfg"
@@ -107,6 +107,10 @@ func _ready() -> void:
 	i = args.find("--shots")
 	if i >= 0 and i + 1 < args.size():
 		_shots(args[i + 1])
+		return
+	i = args.find("--duelfx")
+	if i >= 0 and i + 1 < args.size():
+		_duelfx(args[i + 1])
 		return
 	i = args.find("--promo")
 	if i >= 0 and i + 1 < args.size():
@@ -721,4 +725,35 @@ func _promo(dir: String) -> void:
 	stage.pick(Duel.Act.HEAVY)
 	await get_tree().create_timer(0.66).timeout
 	_save_shot(dir, "08_duelo_golpe.png")
+	get_tree().quit(0)
+
+
+## --duelfx <dir>: burst captures through each kind of blow, to judge the
+## duel effects frame by frame.
+func _duelfx(dir: String) -> void:
+	hud.visible = false
+	_goto(1, "tarde")
+	duel_seed = 3
+	player.position = Vector3(-4.9, 0, -0.6)
+	snap_camera()
+	await _wait(10)
+	start_duel("tetsu")
+	await stage.awaiting_input
+	for step in [["heavy", Duel.Act.HEAVY], ["tech", Duel.Act.TECH], ["light", Duel.Act.LIGHT]]:
+		stage.duel.hero.ki = 100
+		stage.duel.foe.hp = stage.duel.foe.max_hp      # keep the duel going
+		stage.duel.hero.hp = stage.duel.hero.max_hp
+		stage.pick(step[1])
+		for f in 16:
+			await get_tree().create_timer(0.045, true, false, true).timeout
+			_save_shot(dir, "%s_%02d.png" % [step[0], f])
+		await stage.awaiting_input
+	# the final blow (slow motion)
+	stage.duel.foe.hp = 1
+	stage.duel.hero.ki = 100
+	stage.pick(Duel.Act.TECH)
+	for f in 24:
+		await get_tree().create_timer(0.06, true, false, true).timeout
+		_save_shot(dir, "ko_%02d.png" % f)
+	print("fx fired: ", stage.fx.fired if is_instance_valid(stage.fx) else "(freed)")
 	get_tree().quit(0)

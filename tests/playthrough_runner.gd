@@ -252,11 +252,17 @@ func run(m: Node) -> void:
 		stage.pick(Duel.Act.TECH if stage.duel.can_use(Duel.Act.TECH) else Duel.Act.LIGHT)
 		await settle()
 		n += 1
+	var fx_seen := stage.last_fx
 	check(main.last_duel_result == Duel.Result.WIN, "won the duel")
 	check(au.played("victory") and au.played("ko"), "victory fanfare and the fall")
 	check(au.played("slash_light") or au.played("slash_heavy") or au.played("tech"), "blades swish")
 	check(au.played("hit") or au.played("hit_heavy") or au.played("miss"), "blows land (or whiff)")
+	check(fx_seen.has("slash_%d" % Duel.Act.TECH) or fx_seen.has("slash_%d" % Duel.Act.LIGHT), "a sword trail is drawn")
+	check(fx_seen.has("hitstop") and fx_seen.has("shake") and fx_seen.has("impact"), "blows land with hit-stop, shake and an impact star")
+	check(fx_seen.has("slowmo"), "the final blow goes into slow motion")
 	await to_choice()
+	check(is_equal_approx(Engine.time_scale, 1.0), "hit-stop / slow motion always give time back")
+	check(main.cam.h_offset == 0.0 and main.cam.v_offset == 0.0, "camera shake fully settles")
 	check(main.dialogue.open and main.dialogue.choosing, "victory: spare him or finish him?")
 	var hp_after := stage.duel.hero.hp
 	main.dialogue.choose(0)

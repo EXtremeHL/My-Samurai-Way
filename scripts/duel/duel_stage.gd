@@ -14,6 +14,8 @@ const CAM_LOOK := Vector3(0.0, 0.85, 0.0)
 var main: Node
 var duel: Duel
 var ui: DuelUI
+var fx: DuelFX
+var last_fx: Array[String] = []   # effects of the last finished duel (tests)
 var hero: Actor
 var foe: Actor
 var foe_id := ""
@@ -61,6 +63,9 @@ func start(id: String, npc: Actor, spot: Vector3, hero_fighter: Fighter = null, 
 	ui.picked.connect(_on_picked)
 	ui.refresh(duel)
 	ui.root.modulate.a = 0.0
+	fx = DuelFX.new()
+	add_child(fx)
+	fx.setup(main.cam, main.anim_speed)
 
 	# walk both fighters to their marks
 	await _walk_to([[hero, center + Vector3(-SPACING, 0, 0)], [foe, center + Vector3(SPACING, 0, 0)]])
@@ -115,6 +120,8 @@ func _finish() -> void:
 	hero.face_dir(Vector3.RIGHT)
 	foe.face_dir(Vector3.LEFT)
 	ui.queue_free()
+	last_fx = fx.fired.duplicate()
+	fx.queue_free()
 	active = false
 	busy = false
 	finished.emit(duel.result, foe_id)
@@ -267,7 +274,7 @@ func _play_events(ev: Array) -> void:
 				ui.float_text("Contra-ataque...", _screen(_actor(e.who), 1.6), Color(0.7, 0.85, 1.0), 22)
 				await _wait(0.45)
 			"hit":
-				await _strike(e.who, e.kind, true)
+				await _strike(e.who, e.kind, true, e)
 				var tgt := _actor(_other(e.who))
 				var col := Color(1.0, 0.95, 0.85) if e.who == "hero" else Color(1.0, 0.5, 0.45)
 				var txt := str(e.dmg)
@@ -293,14 +300,21 @@ func _play_events(ev: Array) -> void:
 				await _wait(0.25)
 				GameAudio.sfx("slash_heavy", -3.0, 0.05)
 				await _lunge(att, 0.55)
+				# steel on steel: sparks between the blades, a frozen beat, then the cut back
 				GameAudio.sfx("clash", -1.0, 0.04)
+				fx.sparks((att.global_position + dfn.global_position) * 0.5 + Vector3(0, 1.05, 0.3), 26, true)
+				fx.flash(Color(1, 1, 1), 0.3, 0.18)
+				fx.shake(0.12, 0.2)
+				await fx.hitstop(0.14)
 				ui.float_text("Desviado!", _screen(dfn, 2.0), Color(0.7, 0.85, 1.0), 26)
 				dfn.pose("slash")
-				_slash_fx(att, e.by == "foe")
+				fx.slash(att, Duel.Act.HEAVY, e.by == "foe")
+				fx.impact(att, true)
 				_hurt(att)
 				GameAudio.sfx("hit_heavy", -2.0, 0.05)
 				ui.float_text(str(e.dmg), _screen(att, 1.4), Color(1.0, 0.95, 0.85) if e.by == "hero" else Color(1.0, 0.5, 0.45), 40)
-				_shake(0.18)
+				fx.punch(0.07)
+				fx.shake(0.22)
 				ui.refresh(duel)
 				await _wait(0.5)
 				await _return(att)
@@ -335,14 +349,18 @@ func _play_events(ev: Array) -> void:
 				GameAudio.sfx("ko", 0.0)
 				var a := _actor(e.who)
 				a.pose("down")
-				a.set_flash(0.8)
-				create_tween().tween_method(a.set_flash, 0.8, 0.0, 0.6)
-				_shake(0.3)
+				a.set_flash(0.5)
+				create_tween().tween_method(a.set_flash, 0.5, 0.0, 0.3)
+				fx.flash(Color(0.75, 0.08, 0.06), 0.35, 0.6)
+				fx.dust(a.global_position, 16)
+				fx.shake(0.32, 0.45)
+				fx.punch(0.1)
+				fx.slowmo(0.3, 0.7)
 				await _wait(0.9)
 	ui.clear_bubbles()
 
 
-func _strike(who: String, kind: int, hits: bool) -> void:
+func _strike(who: String, kind: int, hits: bool, e := {}) -> void:
 	var att := _actor(who)
 	var tgt := _actor(_other(who))
 	att.pose("raise")
@@ -350,18 +368,41 @@ func _strike(who: String, kind: int, hits: bool) -> void:
 	if kind == Duel.Act.TECH:
 		GameAudio.sfx("tech", -2.0)
 		att.set_flash(0.6)
+		fx.sparks(att.global_position + Vector3(0, 1.0, 0.2), 18, false)   # ki gathering on the blade
 		ui.float_text(Duel.TECH_NAME, _screen(att, 2.2), Color(0.75, 0.9, 1.0), 26)
 		await _wait(0.35)
 		att.set_flash(0.0)
 	if kind != Duel.Act.TECH:
 		GameAudio.sfx("slash_light" if kind == Duel.Act.LIGHT else "slash_heavy", -3.0, 0.06)
+	if kind != Duel.Act.LIGHT:
+		fx.dust(att.global_position)                   # the push-off kicks up dirt
 	await _lunge(att, 0.85 if kind == Duel.Act.LIGHT else 1.0)
 	att.pose("slash")
-	_slash_fx(tgt, who == "foe")
+	fx.slash(tgt, kind, who == "foe")
 	if hits:
 		GameAudio.sfx("hit" if kind == Duel.Act.LIGHT else "hit_heavy", -2.0, 0.06)
 		_hurt(tgt)
-		_shake(0.12 if kind == Duel.Act.LIGHT else 0.25)
+		var guarded: bool = e.get("guarded", false)
+		var crit: bool = e.get("crit", false)
+		fx.impact(tgt, kind != Duel.Act.LIGHT or crit)
+		if guarded:
+			fx.sparks(tgt.global_position + Vector3(0, 1.0, 0.3), 14, false)
+		match kind:
+			Duel.Act.LIGHT:
+				fx.shake(0.07, 0.18)
+				await fx.hitstop(0.05)
+			Duel.Act.HEAVY:
+				fx.punch(0.06)
+				fx.shake(0.2, 0.3)
+				await fx.hitstop(0.1)
+			Duel.Act.TECH:
+				fx.flash(Color(0.85, 0.95, 1.0), 0.55, 0.3)
+				fx.sparks(tgt.global_position + Vector3(0, 1.0, 0.3), 30, false)
+				fx.punch(0.12)
+				fx.shake(0.3, 0.4)
+				await fx.hitstop(0.14)
+		if crit:
+			fx.flash(Color(1.0, 0.92, 0.7), 0.3, 0.2)
 	else:
 		GameAudio.sfx("miss", -4.0, 0.08)
 		var side := 1.0 if who == "hero" else -1.0
@@ -398,50 +439,12 @@ func _return(a: Actor) -> void:
 
 func _hurt(a: Actor) -> void:
 	a.pose("hurt")
-	a.set_flash(0.85)
-	create_tween().tween_method(a.set_flash, 0.85, 0.0, 0.35)
+	a.set_flash(0.6)
+	create_tween().tween_method(a.set_flash, 0.6, 0.0, 0.3)
 	var dir := -1.0 if a == hero else 1.0
 	var t := create_tween()
 	t.tween_property(a, "position:x", a.position.x + 0.2 * dir, 0.06)
 	t.tween_property(a, "position:x", a.position.x, 0.2)
-
-
-func _slash_fx(target: Actor, from_right: bool) -> void:
-	var s := Sprite3D.new()
-	s.texture = load("res://assets/sprites/fx_slash.png")
-	s.pixel_size = 1.0 / 30.0
-	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	s.shaded = false
-	s.flip_h = from_right
-	s.position = target.global_position + Vector3(0.0, 0.85, 0.12)
-	s.modulate = Color(1, 1, 1, 0.95)
-	main.add_child(s)
-	var hit := Sprite3D.new()
-	hit.texture = load("res://assets/sprites/fx_hit.png")
-	hit.pixel_size = 1.0 / 30.0
-	hit.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	hit.shaded = false
-	hit.position = target.global_position + Vector3(0.0, 0.95, 0.15)
-	main.add_child(hit)
-	var t := create_tween()
-	t.set_parallel(true)
-	t.tween_property(s, "modulate:a", 0.0, 0.3)
-	t.tween_property(s, "scale", Vector3(1.25, 1.25, 1.0), 0.3)
-	t.tween_property(hit, "scale", Vector3(1.8, 1.8, 1.0), 0.2)
-	t.tween_property(hit, "modulate:a", 0.0, 0.25)
-	t.chain().tween_callback(s.queue_free)
-	t.chain().tween_callback(hit.queue_free)
-
-
-func _shake(strength: float) -> void:
-	var cam: Camera3D = main.cam
-	var t := create_tween()
-	for i in 5:
-		var k := strength * (1.0 - i / 5.0)
-		t.tween_property(cam, "h_offset", randf_range(-k, k), 0.03)
-		t.tween_property(cam, "v_offset", randf_range(-k, k), 0.03)
-	t.tween_property(cam, "h_offset", 0.0, 0.03)
-	t.tween_property(cam, "v_offset", 0.0, 0.03)
 
 
 func _say(who: String, speaker: String, text: String, secs: float) -> void:

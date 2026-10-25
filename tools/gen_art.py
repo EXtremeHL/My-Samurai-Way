@@ -524,6 +524,63 @@ def fx_slash() -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
+SLASH_STYLES = {
+    # core, rim, thickness, arc span (deg)
+    "light": ((255, 255, 255), (170, 205, 255), 3.0, 120),
+    "heavy": ((255, 250, 225), (255, 196, 92), 6.0, 150),
+    "tech": ((235, 250, 255), (90, 170, 255), 6.0, 160),
+}
+
+
+def fx_slash_strip(kind: str, frames: int = 5, size: int = 72) -> Image.Image:
+    """Sword trail that sweeps across `frames` columns: the leading edge is a
+    bright core, the tail thins and fades into the rim colour; the last
+    frame is a dissolving afterimage. Banded, not smooth, to stay pixel art."""
+    core, rim, thick, span = SLASH_STYLES[kind]
+    sheet = np.zeros((size, size * frames, 4), dtype=np.uint8)
+    cx, cy, rad = size * 0.3, size * 0.5, size * 0.4
+    a0 = -span / 2
+    for f in range(frames):
+        head = a0 + span * min(1.0, (f + 1) / (frames - 1))      # leading angle
+        fade_out = 1.0 if f < frames - 1 else 0.45
+        for y in range(size):
+            for x in range(size):
+                r = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+                ang = math.degrees(math.atan2(y + 0.5 - cy, x + 0.5 - cx))
+                if not (a0 <= ang <= head):
+                    continue
+                behind = (head - ang) / span                          # 0 at the head
+                w = thick * max(0.0, 1.0 - behind * 1.15)
+                if w < 0.6 or abs(r - rad) > w:
+                    continue
+                if f == frames - 1 and (x * 7 + y * 13) % 3 == 0:      # dissolve
+                    continue
+                k = 1.0 - abs(r - rad) / w
+                col = core if (k > 0.45 and behind < 0.55) else rim
+                sheet[y, f * size + x, :3] = col
+                sheet[y, f * size + x, 3] = int(255 * fade_out * (1.0 if behind < 0.7 else 0.6))
+    # 1 px dark ink outline so the arc reads even over a sprite flashing white
+    solid = sheet[..., 3] > 0
+    ring = np.zeros_like(solid)
+    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        ring |= np.roll(np.roll(solid, dy, 0), dx, 1)
+    ring &= ~solid
+    for f in range(frames):                       # no bleed across frame borders
+        ring[:, f * size] &= solid[:, f * size]
+        ring[:, f * size + size - 1] &= solid[:, f * size + size - 1]
+    sheet[ring] = (34, 24, 40, 210)
+    return Image.fromarray(sheet, "RGBA")
+
+
+def fx_spark() -> Image.Image:
+    """Tiny 4x4 spark (white core) for particle bursts."""
+    arr = np.zeros((4, 4, 4), dtype=np.uint8)
+    for (x, y), c in {(1, 1): 255, (2, 1): 255, (1, 2): 255, (2, 2): 255,
+                      (0, 1): 180, (3, 2): 180, (1, 0): 180, (2, 3): 180}.items():
+        arr[y, x] = (255, 255, 255, c)
+    return Image.fromarray(arr, "RGBA")
+
+
 def fx_hit() -> Image.Image:
     """Four-point impact star."""
     w = 24
@@ -966,6 +1023,9 @@ def main():
     fx_slash().save(os.path.join(SPR, "fx_slash.png"))
     fx_hit().save(os.path.join(SPR, "fx_hit.png"))
     fx_fire().save(os.path.join(SPR, "fx_fire.png"))
+    for kind in SLASH_STYLES:
+        fx_slash_strip(kind).save(os.path.join(SPR, f"fx_slash_{kind}.png"))
+    fx_spark().save(os.path.join(SPR, "fx_spark.png"))
     ui_dir = os.path.join(os.path.dirname(SPR), "ui")
     os.makedirs(ui_dir, exist_ok=True)
     ui_washi().save(os.path.join(ui_dir, "washi.png"))
