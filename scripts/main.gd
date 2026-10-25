@@ -39,6 +39,7 @@ var audio: GameAudio
 func _ready() -> void:
 	audio = GameAudio.new()
 	audio.name = "Audio"
+	audio.process_mode = Node.PROCESS_MODE_ALWAYS   # keeps playing under the title screen
 	add_child(audio)
 	village = Village.new()
 	add_child(village)

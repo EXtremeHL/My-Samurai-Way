@@ -7,7 +7,11 @@ config_version=5
 
 config/name="My Samurai Way"
 config/description="RPG de samurai em HD-2D: um vale, várias facções, muitos finais."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/title.tscn"
+boot_splash/bg_color=Color(0.04, 0.02, 0.06, 1)
+boot_splash/image="res://assets/ui/boot_splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -68,6 +72,7 @@ theme/custom="res://assets/theme.tres"
 rendering_method="forward_plus"
 textures/canvas_textures/default_texture_filter=0
 lights_and_shadows/directional_shadow/size=8192
-lights_and_shadows/directional_shadow/size.web=4096
+lights_and_shadows/directional_shadow/size.web=2048
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.web=1
 anti_aliasing/quality/msaa_3d=2

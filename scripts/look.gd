@@ -4,6 +4,9 @@ class_name Look
 ## sky, fog, bloom and depth of field.
 
 const VARIANTS := ["dourado", "neblina", "noite"]
+const COMPAT_EXPOSURE := {"dourado": 0.78, "neblina": 0.8, "noite": 1.0}
+const COMPAT_BRIGHTNESS := {"dourado": 0.86, "neblina": 0.88, "noite": 1.0}
+const COMPAT_SATURATION := {"dourado": 0.92, "neblina": 0.85, "noite": 0.85}
 
 
 static func make_camera_attributes() -> CameraAttributesPractical:
@@ -144,3 +147,13 @@ static func apply(variant: String, env: Environment, sun: DirectionalLight3D, vi
 	village.petals.visible = petals
 	village.fireflies.emitting = flies
 	village.fireflies.visible = flies
+
+	# The web build always runs the Compatibility renderer, which has no SSAO
+	# and lights the day presets noticeably brighter and flatter. Measured
+	# against Forward+ captures (tools: --capture with both renderers) and
+	# pulled back so the browser version looks like the desktop one.
+	env.tonemap_exposure = 1.0
+	if RenderingServer.get_current_rendering_method() == "gl_compatibility":
+		env.tonemap_exposure = COMPAT_EXPOSURE.get(variant, 1.0)
+		env.adjustment_saturation *= COMPAT_SATURATION.get(variant, 1.0)
+		env.adjustment_brightness *= COMPAT_BRIGHTNESS.get(variant, 1.0)
