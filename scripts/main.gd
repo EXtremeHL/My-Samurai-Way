@@ -633,6 +633,7 @@ func _shots(dir: String) -> void:
 ## Store-page screenshots: run windowed with --resolution 1920x1080.
 func _promo(dir: String) -> void:
 	hud.visible = false
+	_saved.visible = false              # no autosave note in store shots
 	# 1. golden afternoon on the main street, title card up
 	player.position = Vector3(-2.2, 0, 0.6)
 	player.face_dir(Vector3.LEFT)

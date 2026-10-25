@@ -24,6 +24,8 @@ You have **three days**. Who you help, who you betray and who you spare decides 
 - **Choices that stick.** Spare or kill a beaten foe, join a faction, accept a contract, defend a stranger or side with her tormentors. The dead stay dead, and reputation with the three factions shapes who will talk to you.
 - **10 endings,** from the valley's protector to the Crow's right hand, from a reforged black-steel blade to a village in flames. Your discovered endings are remembered between runs.
 - **A journal** that tracks your reputation, deeds and discovered endings.
+- **Washi-and-ink interface.** Rice-paper panels, brush-ink lettering and vermilion hanko seals.
+- **Your journey is saved.** The game saves after every conversation and each new part of the day; pick up where you left off with *Continue*, even in the browser.
 - **Original procedural soundtrack.** Koto, shakuhachi, taiko and shamisen in the Japanese miyako-bushi scale, plus a day and night soundscape. All synthesised in code.
 
 ### Controls
@@ -32,7 +34,7 @@ You have **three days**. Who you help, who you betray and who you spare decides 
 | WASD / Arrows | Move |
 | Shift | Run |
 | E / Space / Enter | Talk · confirm · advance text |
-| Esc | Back |
+| Esc | Back · pause menu (save, return to title) |
 | Tab / J | Journal |
 
 ### Language
@@ -60,21 +62,24 @@ Tens **três dias**. Quem ajudas, quem trais e quem poupas decide como acaba a h
 - **Bocas.** Antes de atacar, mandas uma boca. Cada adversário tem uma personalidade escondida (Orgulhoso, Colérico, Cobarde, Estoico, Ganancioso), e a mesma frase pode partir um homem e enfurecer outro.
 - **Escolhas com peso.** Poupar ou matar, juntar-te a uma facção, aceitar contratos, defender ou humilhar. Os mortos não voltam.
 - **10 finais**, guardados entre partidas, e um **diário** com reputação e acontecimentos.
+- **Interface de washi e tinta**: papel de arroz, letras a pincel e selos hanko vermelhos.
+- **Partida gravada**: grava sozinha a cada conversa e parte do dia; continua onde paraste, também no browser.
 - **Banda sonora procedural original**, com koto, shakuhachi, taiko e shamisen.
 
 ### Controlos
-WASD/setas para andar · Shift para correr · E/Espaço para falar e confirmar · Esc para voltar · Tab para o diário.
+WASD/setas para andar · Shift para correr · E/Espaço para falar e confirmar · Esc para voltar e menu de pausa · Tab para o diário.
 
 *Versão inicial: um vale, 3 dias e 10 finais. Feito em Godot 4, com arte, música e som gerados por código.*
 
 ---
 
 ## Suggested itch.io settings
-- **Kind of project:** Downloadable (Windows; export from Godot 4.7)
+- **Kind of project:** HTML (upload `build/MySamuraiWay-web.zip`, tick "This file will be played in the browser"; viewport 1280×720, fullscreen button on)
 - **Classification:** Games
 - **Release status:** In development
 - **Genre:** Role Playing
 - **Tags:** samurai, hd-2d, pixel-art, turn-based, multiple-endings, choices-matter, japan, story-rich, singleplayer, godot
 - **Cover image:** `cover_630x500.png`
-- **Screenshots (in order):** `screenshot_1.png` … `screenshot_8.png`
+- **Screenshots (in order):** `screenshot_1.png` … `screenshot_9.png` (9 = title screen)
 - **Optional banner / header:** `banner_1920x1080.png`
+- **Updating:** delete the old screenshots on the page before uploading these (they show the old blue UI).

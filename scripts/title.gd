@@ -156,12 +156,12 @@ func _build_ui() -> void:
 	var gap2 := Control.new()
 	gap2.custom_minimum_size = Vector2(0, 30)
 	col.add_child(gap2)
-	_status = _label("A preparar o vale…", 18, Color(0.85, 0.82, 0.78), 3)
+	_status = _label("A preparar o vale…", 21, CREAM, 6)
 	col.add_child(_status)
 
 	var found := Endings.discovered().size()
 	var foot := _label("Finais descobertos: %d / %d     ·     WASD andar · E falar · Tab diário" \
-			% [found, Endings.ALL.size()], 16, Color(0.8, 0.76, 0.7), 3)
+			% [found, Endings.ALL.size()], 17, Color(0.93, 0.88, 0.8), 5)
 	foot.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	foot.offset_top = -44
 	foot.offset_bottom = -16
